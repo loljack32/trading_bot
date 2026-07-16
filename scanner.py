@@ -4,7 +4,6 @@ import json
 import os
 
 def scan():
-    # Читаем данные, которые обновил Cloudflare Worker
     with open('data.json', 'r') as f:
         data = json.load(f)
     
@@ -18,15 +17,16 @@ def scan():
         return
 
     exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'future'}})
-    symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
+    symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'LINK/USDT', 'NEAR/USDT']
     
+    found = 0
     for symbol in symbols:
         try:
             candles = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             closes = [c[4] for c in candles]
             highs = [c[2] for c in candles]
             
-            # Простая проверка SFP для шорта (пример)
+            # Простая проверка SFP для шорта
             recent_high = max(highs[-10:])
             last_high = highs[-1]
             last_close = closes[-1]
@@ -36,7 +36,6 @@ def scan():
                 stop = last_high * 1.005
                 dist = stop - entry
                 
-                # Расчет позиции
                 risk_amount = balance * (risk_percent / 100)
                 pos_size = (risk_amount / dist) * entry
                 leverage = min(max(round(pos_size / balance), 1), 10)
@@ -49,7 +48,8 @@ def scan():
                 
                 requests.post(f'https://api.telegram.org/bot{bot_token}/sendMessage', 
                               json={'chat_id': chat_id, 'text': msg})
-                break # Нашли один сетап, отправили, хватит
+                found += 1
+                if found >= 3: break
         except Exception as e:
             continue
 
