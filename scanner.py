@@ -5,7 +5,7 @@ import os
 import sys
 
 def scan():
-    print("--- 🚀 НАЧАЛО СКАНИРОВАНИЯ ---")
+    print("--- 🚀 НАЧАЛО СКАНИРОВАНИЯ (OKX) ---")
     
     # 1. Читаем файл
     try:
@@ -21,7 +21,7 @@ def scan():
     chat_id = str(data.get('chat_id', ''))
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     
-    print(f"️ Параметры: Баланс={balance}, Риск={risk_percent}%, Chat_ID='{chat_id}'")
+    print(f"⚙️ Параметры: Баланс={balance}, Риск={risk_percent}%, Chat_ID='{chat_id}'")
 
     # 2. Проверки
     if balance == 0:
@@ -36,16 +36,17 @@ def scan():
         print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден.")
         return
 
-    print("🔍 Начинаем опрос биржи BYBIT...")
+    print("🔍 Начинаем опрос биржи OKX...")
     
-    # ИСПОЛЬЗУЕМ BYBIT ВМЕСТО BINANCE
-    exchange = ccxt.bybit({
+    # ИСПОЛЬЗУЕМ OKX. Для бессрочных фьючерсов в ccxt используется тип 'swap'
+    exchange = ccxt.okx({
         'enableRateLimit': True, 
         'options': {
-            'defaultType': 'future'  # Фьючерсы
+            'defaultType': 'swap'  
         }
     })
     
+    # Формат символов для OKX swap в ccxt
     symbols = ['BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'BNB/USDT:USDT', 'XRP/USDT:USDT', 'ADA/USDT:USDT', 'DOGE/USDT:USDT', 'AVAX/USDT:USDT', 'LINK/USDT:USDT', 'NEAR/USDT:USDT']
     
     found = 0
@@ -75,7 +76,7 @@ def scan():
                 coin_name = symbol.split('/')[0]
                 
                 msg = (f"🚨 СЕТУП SFP+MSS\n"
-                       f" {coin_name} | ШОРТ\n"
+                       f"💎 {coin_name} | ШОРТ\n"
                        f"📍 Вход: {entry:.2f} | Стоп: {stop:.2f}\n"
                        f"💰 Позиция: ${pos_size:.2f} | Плечо: {leverage}x\n"
                        f"⚠️ Риск: ${risk_amount:.2f}")
@@ -83,10 +84,12 @@ def scan():
                 print(f"📤 Отправка сообщения в Telegram...")
                 response = requests.post(f'https://api.telegram.org/bot{bot_token}/sendMessage', 
                               json={'chat_id': chat_id, 'text': msg})
-                print(f"📬 Ответ Telegram: {response.status_code}")
+                print(f"📬 Ответ Telegram: {response.status_code} - {response.text}")
                 
                 found += 1
-                if found >= 3: break
+                if found >= 3: 
+                    print("Достигнут лимит в 3 сообщения. Остановка.")
+                    break
         except Exception as e:
             print(f"⚠️ Ошибка при обработке {symbol}: {e}")
             continue
