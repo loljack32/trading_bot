@@ -33,28 +33,31 @@ def scan():
         print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден в Secrets GitHub.")
         return
 
-    print("🔍 Подключаюсь к OKX и получаю Топ-100 пар по объему...\n")
+    print("🔍 Получаю все тикеры с OKX и сортирую по объему...\n")
     
     try:
         exchange = ccxt.okx({
             'enableRateLimit': True, 
-            'options': {'defaultType': 'swap'} # Бессрочные фьючерсы
+            'options': {'defaultType': 'swap'}
         })
         
-        # Получаем тикеры всех пар
+        # Получаем все тикеры
         tickers = exchange.fetch_tickers()
         
-        # Фильтруем только USDT бессрочные фьючерсы, у которых есть объем
+        # Фильтруем только USDT бессрочные фьючерсы с объемом
         usdt_swaps = {
             symbol: info for symbol, info in tickers.items() 
-            if symbol.endswith('/USDT:USDT') and info.get('quoteVolume') is not None
+            if symbol.endswith('/USDT:USDT') and info.get('baseVolume') is not None and info['baseVolume'] > 0
         }
         
-        # Сортируем по объему торгов (quoteVolume) по убыванию и берем топ-100
-        sorted_pairs = sorted(usdt_swaps.keys(), key=lambda x: usdt_swaps[x]['quoteVolume'], reverse=True)
+        # Сортируем по baseVolume (объем в монетах) по убыванию
+        sorted_pairs = sorted(usdt_swaps.keys(), key=lambda x: usdt_swaps[x]['baseVolume'], reverse=True)
+        
+        # Берем топ-100
         top_100_symbols = sorted_pairs[:100]
         
-        print(f"✅ Успешно получено {len(top_100_symbols)} пар. Начинаю сканирование...\n")
+        print(f"✅ Получено {len(top_100_symbols)} пар (отсортировано по объему)")
+        print(f"   Топ-5 самых ликвидных: {top_100_symbols[:5]}\n")
         
     except Exception as e:
         print(f"❌ Критическая ошибка при получении данных с OKX: {e}")
@@ -65,7 +68,7 @@ def scan():
     # 2. Цикл сканирования с ЭХОМ в логи
     for i, symbol in enumerate(top_100_symbols, 1):
         try:
-            print(f"🔄 [{i}/100] Проверяю {symbol:<12} ...", end=" ")
+            print(f"🔄 [{i}/100] Проверяю {symbol:<15} ...", end=" ")
             
             candles = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             closes = [c[4] for c in candles]
@@ -106,13 +109,13 @@ def scan():
                 
                 found += 1
                 if found >= 3: 
-                    print("   ⏹️ Достигнут лимит в 3 сообщения. Остановка сканирования.")
+                    print("   ️ Достигнут лимит в 3 сообщения. Остановка сканирования.")
                     break
             else:
                 print("нет сетапа")
                 
         except Exception as e:
-            print(f"⚠️ Ошибка: {str(e)[:50]}")
+            print(f"️ Ошибка: {str(e)[:50]}")
             continue
 
     # 3. Итоговое сообщение в Telegram, если ничего не найдено
@@ -121,7 +124,8 @@ def scan():
     if found == 0:
         no_signal_msg = (
             "🔍 <b>Сканирование завершено</b>\n\n"
-            "На данный момент четких сигналов <b>SFP+MSS</b> на Топ-100 парах OKX не найдено.\n\n"
+            f"Проверено {len(top_100_symbols)} пар на OKX (топ по объему).\n\n"
+            "На данный момент четких сигналов <b>SFP+MSS</b> не найдено.\n\n"
             "Это хорошая новость: рынок либо в сильном тренде без ложных пробоев, либо в узком боковике. Лучше переждать, чем торговать мусор.\n\n"
             "⏳ Жди следующего обновления через 30 минут!"
         )
