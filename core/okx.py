@@ -303,7 +303,7 @@ class OKXClient:
 
             "limit":
 
-            limit
+            limit + 1
 
         }
 
