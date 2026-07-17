@@ -1,4 +1,11 @@
+# ============================================================
+# core/scanner.py
+# Market Scanner
+# ============================================================
+
+
 from core.okx import OKXClient
+
 
 from core.indicators import (
     bullish_sfp,
@@ -9,6 +16,11 @@ from core.indicators import (
     signal_score
 )
 
+
+from core.quality import quality_check
+
+
+
 from config import (
     SYMBOLS,
     CANDLE_LIMIT,
@@ -16,17 +28,24 @@ from config import (
 )
 
 
+
+
 okx = OKXClient()
 
 
 
-# =====================================
+
+
+# ============================================================
 # MARKET SCANNER
-# =====================================
+# ============================================================
+
 
 def scan_market(timeframe):
 
+
     signals = []
+
 
 
     print(
@@ -34,13 +53,16 @@ def scan_market(timeframe):
     )
 
 
+
     for symbol in SYMBOLS:
+
 
 
         print(
             "\nChecking",
             symbol
         )
+
 
 
         candles = okx.get_ohlcv(
@@ -50,14 +72,18 @@ def scan_market(timeframe):
         )
 
 
+
         if candles is None:
-            continue
-
-
-
-        if len(candles) < 100:
 
             continue
+
+
+
+
+        if len(candles) < 200:
+
+            continue
+
 
 
 
@@ -67,22 +93,28 @@ def scan_market(timeframe):
         )
 
 
+
         long_sfp = bullish_sfp(
             candles
         )
+
 
         short_sfp = bearish_sfp(
             candles
         )
 
 
+
         long_mss = bullish_mss(
             candles
         )
 
+
         short_mss = bearish_mss(
             candles
         )
+
+
 
 
 
@@ -107,36 +139,34 @@ def scan_market(timeframe):
 
 
 
+
         direction = None
 
 
 
-        # =========================
-        # LONG
-        # =========================
+
+        # =====================================
+        # SETUP DETECTION
+        # =====================================
+
 
         if long_sfp and long_mss:
+
 
             direction = "LONG"
 
 
 
-        # =========================
-        # SHORT
-        # =========================
-
         elif short_sfp and short_mss:
+
 
             direction = "SHORT"
 
 
 
 
-        # если нет полного сетапа
-        # но есть MSS + объём
-        # даём шанс через score
-
         elif long_mss and volume_ok:
+
 
             direction = "LONG"
 
@@ -144,7 +174,10 @@ def scan_market(timeframe):
 
         elif short_mss and volume_ok:
 
+
             direction = "SHORT"
+
+
 
 
 
@@ -155,22 +188,93 @@ def scan_market(timeframe):
 
 
 
+
+        # =====================================
+        # BASIC SCORE
+        # =====================================
+
+
         score = signal_score(
             candles,
             direction
         )
 
 
+
         print(
-            "Score:",
+            "Base Score:",
             score
         )
 
 
 
+
         if score < MIN_SIGNAL_SCORE:
 
+            print(
+                "Rejected: low score"
+            )
+
             continue
+
+
+
+
+
+        # =====================================
+        # QUALITY FILTER
+        # =====================================
+
+
+        quality_ok, quality_score = quality_check(
+
+            candles,
+
+            direction
+
+        )
+
+
+
+        print(
+            "Quality:",
+            quality_score
+        )
+
+
+
+        if not quality_ok:
+
+
+            print(
+                "Rejected by quality filter:",
+                symbol
+            )
+
+
+            continue
+
+
+
+
+
+        final_score = score + quality_score
+
+
+
+        if final_score > 100:
+
+            final_score = 100
+
+
+
+
+
+        print(
+            "FINAL SCORE:",
+            final_score
+        )
+
 
 
 
@@ -178,13 +282,22 @@ def scan_market(timeframe):
         signals.append(
 
             create_signal(
+
                 symbol,
+
                 candles,
+
                 direction,
-                score
+
+                final_score,
+
+                quality_score
+
             )
 
         )
+
+
 
 
 
@@ -195,26 +308,40 @@ def scan_market(timeframe):
 
 
 
-# =====================================
+
+# ============================================================
 # CREATE SIGNAL
-# =====================================
+# ============================================================
 
 
 def create_signal(
+
         symbol,
+
         df,
+
         direction,
-        score
+
+        score,
+
+        quality_score
+
 ):
 
 
+
     entry = float(
+
         df.iloc[-1]["close"]
+
     )
 
 
 
+
+
     if direction == "LONG":
+
 
 
         stop = float(
@@ -224,6 +351,7 @@ def create_signal(
             .min()
 
         )
+
 
 
         target = (
@@ -242,7 +370,10 @@ def create_signal(
 
 
 
+
+
     else:
+
 
 
         stop = float(
@@ -252,6 +383,7 @@ def create_signal(
             .max()
 
         )
+
 
 
         target = (
@@ -271,43 +403,78 @@ def create_signal(
 
 
 
+
+
     return {
 
 
         "pair":
+
             symbol,
 
 
+
         "exchange":
+
             "OKX",
 
 
+
         "direction":
+
             direction,
 
 
+
         "confidence":
+
             score,
 
 
+
+        "quality":
+
+            quality_score,
+
+
+
         "entry":
-            round(entry,8),
+
+            round(
+                entry,
+                8
+            ),
+
 
 
         "stop":
-            round(stop,8),
+
+            round(
+                stop,
+                8
+            ),
+
 
 
         "target":
-            round(target,8),
+
+            round(
+                target,
+                8
+            ),
+
 
 
         "volume":
+
             round(
+
                 float(
                     df.iloc[-1]["volume"]
                 ),
+
                 2
+
             )
 
     }
