@@ -499,3 +499,16 @@ def signal_score(
         score,
         100
     )
+
+
+def volume_confirmation(df):
+
+    return (
+
+        volume_strength(df)
+
+        >=
+
+        VOLUME_MULTIPLIER
+
+    )
