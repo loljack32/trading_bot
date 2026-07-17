@@ -130,3 +130,16 @@ HISTORY_FILE = (
     "data/history.json"
 
 )
+
+
+
+# =====================================
+# TELEGRAM CHECK
+# =====================================
+
+if not TELEGRAM_TOKEN:
+    print("WARNING: TELEGRAM_TOKEN is empty")
+
+
+if not TELEGRAM_CHAT_ID:
+    print("WARNING: TELEGRAM_CHAT_ID is empty")
