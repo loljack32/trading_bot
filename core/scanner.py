@@ -50,7 +50,6 @@ htf_cache = {}
 # GET HTF TREND
 # ============================================================
 
-
 def get_higher_trend(symbol):
 
 
@@ -105,7 +104,6 @@ def get_higher_trend(symbol):
 # ============================================================
 # SCAN MARKET
 # ============================================================
-
 
 def scan_market(timeframe):
 
@@ -422,7 +420,7 @@ def scan_market(timeframe):
 
 
         # =================================================
-        # FINAL SCORE
+        # FINAL SCORE 0-100
         # =================================================
 
 
@@ -436,17 +434,26 @@ def scan_market(timeframe):
 
 
 
-        final_score = (
+        final_score = round(
 
-            base_score
+            (base_score * 0.6)
 
             +
 
-            filter_score
+            (filter_score * 0.4)
 
         )
 
 
+
+
+        print(
+
+            "Base score:",
+
+            base_score
+
+        )
 
 
         print(
@@ -479,7 +486,9 @@ def scan_market(timeframe):
 
                 direction,
 
-                final_score
+                final_score,
+
+                timeframe
 
             )
 
@@ -502,7 +511,6 @@ def scan_market(timeframe):
 # CREATE SIGNAL
 # ============================================================
 
-
 def create_signal(
 
         symbol,
@@ -511,7 +519,9 @@ def create_signal(
 
         direction,
 
-        score
+        score,
+
+        timeframe
 
 ):
 
@@ -608,6 +618,11 @@ def create_signal(
         "exchange":
 
             "OKX",
+
+
+        "timeframe":
+
+            timeframe,
 
 
 
