@@ -1,19 +1,39 @@
+# ============================================================
+# core/quality.py
+# Signal Quality Filter
+# ============================================================
+
 import pandas as pd
 
+
+
+# ============================================================
+# EMA 200 TREND
+# ============================================================
 
 def ema_trend(df, period=200):
 
     ema = (
         df["close"]
-        .ewm(span=period)
+        .ewm(
+            span=period,
+            adjust=False
+        )
         .mean()
     )
 
 
-    price = df["close"].iloc[-1]
+    price = float(
+        df["close"].iloc[-1]
+    )
 
 
-    if price > ema.iloc[-1]:
+    ema_value = float(
+        ema.iloc[-1]
+    )
+
+
+    if price > ema_value:
 
         return "LONG"
 
@@ -24,22 +44,34 @@ def ema_trend(df, period=200):
 
 
 
-def rsi_filter(df):
+# ============================================================
+# RSI
+# ============================================================
+
+def rsi_filter(
+        df,
+        period=14
+):
 
 
-    delta = df["close"].diff()
+    delta = (
+        df["close"]
+        .diff()
+    )
 
 
     gain = (
-        delta.clip(lower=0)
-        .rolling(14)
+        delta
+        .clip(lower=0)
+        .rolling(period)
         .mean()
     )
 
 
     loss = (
-        -delta.clip(upper=0)
-        .rolling(14)
+        -delta
+        .clip(upper=0)
+        .rolling(period)
         .mean()
     )
 
@@ -47,22 +79,32 @@ def rsi_filter(df):
     rs = gain / loss
 
 
-    rsi = 100 - (
-        100 /
-        (1 + rs)
+    rsi = (
+        100
+        -
+        (
+            100 /
+            (1 + rs)
+        )
     )
 
 
-    value = rsi.iloc[-1]
-
-
-    return value
-
-
+    return float(
+        rsi.iloc[-1]
+    )
 
 
 
-def atr(df, period=14):
+
+
+# ============================================================
+# ATR
+# ============================================================
+
+def atr(
+        df,
+        period=14
+):
 
 
     high_low = (
@@ -97,7 +139,7 @@ def atr(df, period=14):
 
 
 
-    return (
+    return float(
         tr
         .rolling(period)
         .mean()
@@ -108,6 +150,10 @@ def atr(df, period=14):
 
 
 
+# ============================================================
+# QUALITY CHECK
+# ============================================================
+
 def quality_check(
         df,
         direction,
@@ -115,11 +161,13 @@ def quality_check(
 ):
 
 
-    score = 0
+    quality = 0
 
 
 
-    # EMA TREND
+    # -----------------------------
+    # EMA 200
+    # -----------------------------
 
     trend = ema_trend(df)
 
@@ -127,66 +175,126 @@ def quality_check(
 
     if direction == trend:
 
-        score += 25
+        quality += 25
+
+        print(
+            "EMA200: OK"
+        )
+
 
     else:
 
-        return False, score
+        quality -= 15
+
+        print(
+            "EMA200: AGAINST TREND"
+        )
 
 
 
 
 
+    # -----------------------------
     # RSI
-
+    # -----------------------------
 
     rsi = rsi_filter(df)
 
 
+    print(
+        "RSI:",
+        round(rsi,2)
+    )
 
-    if 35 < rsi < 65:
 
-        score += 25
 
+    if 35 <= rsi <= 65:
+
+        quality += 25
+
+        print(
+            "RSI: OK"
+        )
+
+
+    elif direction == "LONG" and rsi < 35:
+
+        quality -= 10
+
+        print(
+            "RSI: OVERSOLD"
+        )
+
+
+    elif direction == "SHORT" and rsi > 65:
+
+        quality -= 10
+
+        print(
+            "RSI: OVERBOUGHT"
+        )
 
 
     else:
 
-        return False, score
+        quality += 5
 
 
 
 
 
+    # -----------------------------
     # ATR
-
+    # -----------------------------
 
     current_atr = atr(df)
 
 
-
     if current_atr > 0:
 
-        score += 25
+        quality += 25
+
+        print(
+            "ATR: OK"
+        )
 
 
 
 
 
-    # HIGHER TF
-
+    # -----------------------------
+    # HIGHER TIMEFRAME TREND
+    # -----------------------------
 
     if higher_trend:
 
 
-        if direction != higher_trend:
+        if direction == higher_trend:
 
-            return False, score
+            quality += 25
+
+            print(
+                "HTF TREND: OK"
+            )
 
 
-        score += 25
+        else:
+
+            quality -= 25
+
+            print(
+                "HTF TREND: AGAINST"
+            )
 
 
 
 
-    return True, score
+    # минимум качества
+
+    if quality >= 40:
+
+        return True, quality
+
+
+
+    return False, quality
