@@ -4,9 +4,11 @@ import json
 from datetime import datetime
 
 
+
 # =====================================
-# DEBUG IMPORT CHECK
+# DEBUG
 # =====================================
+
 
 print("======================")
 print("INDICATORS CHECK")
@@ -18,8 +20,14 @@ try:
     import core.indicators as indicators
 
 
-    print("Indicators loaded:")
-    print(indicators.__file__)
+    print(
+        "Indicators loaded:"
+    )
+
+
+    print(
+        indicators.__file__
+    )
 
 
     print(
@@ -32,6 +40,7 @@ try:
 
 
 except Exception as e:
+
 
     print(
         "Indicators import error:",
@@ -46,14 +55,14 @@ print("======================")
 
 
 
+
+
 # =====================================
 # IMPORTS
 # =====================================
 
 
-from config import (
-    HISTORY_FILE
-)
+from config import HISTORY_FILE
 
 
 from core.scanner import scan_market
@@ -64,12 +73,20 @@ from notifications.telegram import TelegramBot
 
 
 
-# =====================================
-# TELEGRAM
-# =====================================
 
 
 telegram = TelegramBot()
+
+
+
+
+
+# максимум сигналов за один запуск
+
+MAX_SIGNALS_PER_SCAN = 10
+
+
+
 
 
 
@@ -92,11 +109,17 @@ def load_history():
 
     try:
 
+
         with open(
+
             HISTORY_FILE,
+
             "r",
+
             encoding="utf-8"
+
         ) as f:
+
 
             return json.load(f)
 
@@ -117,6 +140,8 @@ def load_history():
 
 
 
+
+
 def save_history(history):
 
 
@@ -127,71 +152,85 @@ def save_history(history):
 
     if folder:
 
+
         os.makedirs(
+
             folder,
+
             exist_ok=True
+
         )
 
 
 
     with open(
+
         HISTORY_FILE,
+
         "w",
+
         encoding="utf-8"
+
     ) as f:
 
 
         json.dump(
+
             history,
+
             f,
+
             indent=4,
+
             ensure_ascii=False
+
         )
 
 
 
 
 
+
+
+
 # =====================================
-# DUPLICATE CHECK
+# DUPLICATE
 # =====================================
 
 
-def is_new_signal(signal, history):
+def is_new_signal(
+
+        signal,
+
+        history
+
+):
 
 
     for old in history:
 
 
-        same_pair = (
+
+        if (
+
             old.get("pair")
             ==
             signal.get("pair")
-        )
 
+            and
 
-        same_direction = (
             old.get("direction")
             ==
             signal.get("direction")
-        )
 
+            and
 
-        same_timeframe = (
             old.get("timeframe")
             ==
             signal.get("timeframe")
-        )
 
-
-
-        if (
-            same_pair
-            and
-            same_direction
-            and
-            same_timeframe
         ):
+
 
             return False
 
@@ -203,29 +242,49 @@ def is_new_signal(signal, history):
 
 
 
+
+
 # =====================================
 # ADD HISTORY
 # =====================================
 
 
-def add_history(signal, history):
+def add_history(
+
+        signal,
+
+        history
+
+):
 
 
     item = signal.copy()
 
 
+
     item["time"] = (
+
         datetime.utcnow()
+
         .isoformat()
+
     )
+
 
 
     history.append(
+
         item
+
     )
 
 
+
     return history[-500:]
+
+
+
+
 
 
 
@@ -239,58 +298,69 @@ def add_history(signal, history):
 def main():
 
 
+
     print()
 
     print("======================")
-    print(" SFP MSS BOT START ")
+
+    print(
+        " SFP MSS BOT START "
+    )
+
     print("======================")
+
 
 
     history = load_history()
 
 
 
-    # приоритет анализа
 
-    priority_timeframes = [
 
-        "4H",
+    # рабочий порядок
+
+    timeframes = [
+
+        "15m",
 
         "1H",
 
-        "15m"
+        "4H"
 
     ]
 
 
 
-    selected_signals = []
 
-    selected_tf = None
-
+    sent_count = 0
 
 
-    # =====================================
-    # SEARCH BEST TIMEFRAME
-    # =====================================
 
 
-    for timeframe in priority_timeframes:
+
+    for timeframe in timeframes:
+
 
 
         print()
 
         print(
+
             "Scanning",
+
             timeframe
+
         )
+
 
 
         try:
 
 
             signals = scan_market(
+
                 timeframe
+
             )
 
 
@@ -299,128 +369,161 @@ def main():
 
 
             print(
+
                 "Scanner error:",
+
                 e
+
             )
+
 
             continue
 
 
 
-        if signals:
+
+
+        if not signals:
 
 
             print(
-                "Signals found:",
-                timeframe
-            )
 
-
-            selected_signals = signals
-
-            selected_tf = timeframe
-
-
-            break
-
-
-
-        else:
-
-
-            print(
                 "No signals"
+
             )
 
 
+            continue
 
 
-    # =====================================
-    # NO SIGNALS
-    # =====================================
-
-
-    if not selected_signals:
-
-
-        print(
-            "No signals anywhere"
-        )
-
-
-        save_history(history)
-
-
-        print(
-            "SCAN COMPLETE"
-        )
-
-        return
-
-
-
-
-
-    # =====================================
-    # SEND SIGNALS
-    # =====================================
-
-
-    for signal in selected_signals:
-
-
-
-        signal["timeframe"] = selected_tf
 
 
 
         print(
-            "FOUND:",
-            signal
+
+            "Found:",
+
+            len(signals)
+
         )
 
 
 
-        if is_new_signal(
-            signal,
-            history
-        ):
+
+
+        for signal in signals:
 
 
 
-            sent = telegram.send_signal(
+            if sent_count >= MAX_SIGNALS_PER_SCAN:
+
+
+                break
+
+
+
+
+
+            signal["timeframe"] = timeframe
+
+
+
+
+
+            print(
+
+                "FOUND:",
+
                 signal
+
             )
 
 
-            if sent:
+
+
+
+            if not is_new_signal(
+
+                signal,
+
+                history
+
+            ):
+
 
                 print(
-                    "Telegram sent"
+
+                    "Duplicate signal"
+
+                )
+
+
+                continue
+
+
+
+
+
+
+            try:
+
+
+                result = telegram.send_signal(
+
+                    signal
+
                 )
 
 
 
+                if result:
+
+
+                    print(
+
+                        "Telegram sent"
+
+                    )
+
+
+                    sent_count += 1
+
+
+
+            except Exception as e:
+
+
+                print(
+
+                    "Telegram error:",
+
+                    e
+
+                )
+
+
+
+
+
+
             history = add_history(
+
                 signal,
+
                 history
+
             )
 
 
-
-        else:
-
-
-            print(
-                "Duplicate signal"
-            )
 
 
 
 
 
     save_history(
+
         history
+
     )
 
 
@@ -428,8 +531,20 @@ def main():
     print()
 
     print(
+
         "SCAN COMPLETE"
+
     )
+
+    print(
+
+        "Signals sent:",
+
+        sent_count
+
+    )
+
+
 
 
 
