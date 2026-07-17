@@ -25,21 +25,17 @@ def find_swings(df):
         len(df) - SWING_LOOKBACK
     ):
 
-
         high = df.iloc[i]["high"]
         low = df.iloc[i]["low"]
-
 
 
         left = df.iloc[
             i-SWING_LOOKBACK:i
         ]
 
-
         right = df.iloc[
             i+1:i+1+SWING_LOOKBACK
         ]
-
 
 
         if (
@@ -52,14 +48,13 @@ def find_swings(df):
 
         ):
 
+            highs.append({
 
-            highs.append(
-                {
-                    "index": i,
-                    "price": high
-                }
-            )
+                "index": i,
 
+                "price": high
+
+            })
 
 
         if (
@@ -72,14 +67,13 @@ def find_swings(df):
 
         ):
 
+            lows.append({
 
-            lows.append(
-                {
-                    "index": i,
-                    "price": low
-                }
-            )
+                "index": i,
 
+                "price": low
+
+            })
 
 
     return highs, lows
@@ -102,7 +96,6 @@ def calculate_atr(
     data = df.copy()
 
 
-
     data["prev_close"] = (
 
         data["close"]
@@ -112,12 +105,9 @@ def calculate_atr(
     )
 
 
-
     data["tr"] = data.apply(
 
-        lambda x:
-
-        max(
+        lambda x: max(
 
             x["high"] - x["low"],
 
@@ -148,7 +138,6 @@ def calculate_atr(
     )
 
 
-
     return (
 
         data["tr"]
@@ -173,11 +162,7 @@ def calculate_atr(
 def volume_strength(df):
 
 
-    current = (
-
-        df.iloc[-1]["volume"]
-
-    )
+    current = df.iloc[-1]["volume"]
 
 
     average = (
@@ -198,8 +183,30 @@ def volume_strength(df):
         return 0
 
 
-
     return current / average
+
+
+
+
+
+# =====================================
+# Volume confirmation
+# Совместимость со scanner.py
+# =====================================
+
+
+def volume_confirmation(df):
+
+
+    return (
+
+        volume_strength(df)
+
+        >=
+
+        VOLUME_MULTIPLIER
+
+    )
 
 
 
@@ -216,22 +223,18 @@ def bullish_sfp(df):
     highs, lows = find_swings(df)
 
 
-
     if len(lows) < 2:
 
         return False
 
 
-
-    previous_low = lows[-2]["price"]
-
+    level = lows[-2]["price"]
 
 
     candle = df.iloc[-1]
 
 
-
-    candle_range = (
+    size = (
 
         candle["high"]
 
@@ -242,15 +245,14 @@ def bullish_sfp(df):
     )
 
 
-    if candle_range == 0:
+    if size == 0:
 
         return False
 
 
-
     wick = (
 
-        previous_low
+        level
 
         -
 
@@ -259,17 +261,17 @@ def bullish_sfp(df):
     )
 
 
-    wick_ratio = wick / candle_range
+    wick_ratio = wick / size
 
 
 
     return (
 
-        candle["low"] < previous_low
+        candle["low"] < level
 
         and
 
-        candle["close"] > previous_low
+        candle["close"] > level
 
         and
 
@@ -289,8 +291,7 @@ def bullish_sfp(df):
 def bearish_sfp(df):
 
 
-    highs, lows = find_swings()
-
+    highs, lows = find_swings(df)
 
 
     if len(highs) < 2:
@@ -298,16 +299,13 @@ def bearish_sfp(df):
         return False
 
 
-
-    previous_high = highs[-2]["price"]
-
+    level = highs[-2]["price"]
 
 
     candle = df.iloc[-1]
 
 
-
-    candle_range = (
+    size = (
 
         candle["high"]
 
@@ -318,10 +316,9 @@ def bearish_sfp(df):
     )
 
 
-    if candle_range == 0:
+    if size == 0:
 
         return False
-
 
 
     wick = (
@@ -330,23 +327,22 @@ def bearish_sfp(df):
 
         -
 
-        previous_high
+        level
 
     )
 
 
-
-    wick_ratio = wick / candle_range
+    wick_ratio = wick / size
 
 
 
     return (
 
-        candle["high"] > previous_high
+        candle["high"] > level
 
         and
 
-        candle["close"] < previous_high
+        candle["close"] < level
 
         and
 
@@ -359,7 +355,7 @@ def bearish_sfp(df):
 
 
 # =====================================
-# Market Structure Shift
+# Bullish MSS
 # =====================================
 
 
@@ -369,25 +365,26 @@ def bullish_mss(df):
     highs, lows = find_swings(df)
 
 
-
-    if len(highs) < 2:
+    if len(highs) < 1:
 
         return False
 
 
-
-    last_high = highs[-1]["price"]
-
+    last_structure = highs[-1]["price"]
 
 
     close = df.iloc[-1]["close"]
 
 
-
-    return close > last_high
-
+    return close > last_structure
 
 
+
+
+
+# =====================================
+# Bearish MSS
+# =====================================
 
 
 def bearish_mss(df):
@@ -396,29 +393,25 @@ def bearish_mss(df):
     highs, lows = find_swings(df)
 
 
-
-    if len(lows) < 2:
+    if len(lows) < 1:
 
         return False
 
 
-
-    last_low = lows[-1]["price"]
-
+    last_structure = lows[-1]["price"]
 
 
     close = df.iloc[-1]["close"]
 
 
-
-    return close < last_low
+    return close < last_structure
 
 
 
 
 
 # =====================================
-# Signal Score
+# Confidence score
 # =====================================
 
 
@@ -440,7 +433,6 @@ def signal_score(
             score += 35
 
 
-
         if bullish_mss(df):
 
             score += 35
@@ -455,7 +447,6 @@ def signal_score(
             score += 35
 
 
-
         if bearish_mss(df):
 
             score += 35
@@ -464,18 +455,15 @@ def signal_score(
 
 
 
-    volume = volume_strength(df)
-
-
-
-    if volume >= VOLUME_MULTIPLIER:
+    if volume_confirmation(df):
 
         score += 15
 
 
 
-    atr = calculate_atr(df)
 
+
+    atr = calculate_atr(df)
 
 
     price = df.iloc[-1]["close"]
@@ -488,27 +476,18 @@ def signal_score(
         volatility = atr / price
 
 
-
         if volatility >= 0.003:
 
             score += 15
 
 
 
+
+
     return min(
+
         score,
+
         100
-    )
-
-
-def volume_confirmation(df):
-
-    return (
-
-        volume_strength(df)
-
-        >=
-
-        VOLUME_MULTIPLIER
 
     )
