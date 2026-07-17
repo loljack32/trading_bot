@@ -27,9 +27,10 @@ class TelegramBot:
                 timeout=10,
             )
             response.raise_for_status()
+            self.logger.info("Telegram message sent to %s (len=%s)", target_chat_id, len(message))
             return True
         except requests.RequestException as exc:
-            self.logger.warning("Telegram send failed: %s", exc)
+            self.logger.warning("Telegram send failed: %s; response=%s", exc, getattr(exc, 'response', None))
             return False
 
     def send_signal(self, signal: dict[str, object]) -> bool:
@@ -57,17 +58,24 @@ class TelegramBot:
         text = (message or "").strip()
         if not text:
             return False
+        self.logger.info("Received Telegram message from %s: %s", chat_id or "unknown", text)
 
         if text.startswith("/balance") or text.startswith("/procent"):
             path = getattr(config, "POSITION_STATE_FILE", "data/position_state.json")
             if text.startswith("/balance"):
                 state = update_position_state_from_command(text, path)
-                self.send(f"Balance saved: ${state.get('balance_usd')}", chat_id)
+                if state.get("balance_usd") is not None:
+                    self.send(f"✅ Balance saved: ${state.get('balance_usd')}", chat_id)
+                else:
+                    self.send("❌ Invalid balance value", chat_id)
                 return True
 
             if text.startswith("/procent"):
                 state = update_position_state_from_command(text, path)
-                self.send(f"Risk saved: {state.get('risk_pct')}%", chat_id)
+                if state.get("risk_pct") is not None:
+                    self.send(f"✅ Risk saved: {state.get('risk_pct')}%", chat_id)
+                else:
+                    self.send("❌ Invalid risk value", chat_id)
                 return True
 
         self.send("Available commands:\n/balance <amount_usd>\n/procent <risk_pct>", chat_id)

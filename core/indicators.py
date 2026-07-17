@@ -166,118 +166,69 @@ def detect_sfp(df: pd.DataFrame, direction: str) -> dict[str, Any] | None:
 
 
 def detect_mss(df: pd.DataFrame, direction: str) -> dict[str, Any] | None:
+    """Detect Multiple Swing Structure (MSS): simplified hybrid approach.
+    
+    MSS indicates potential continuation after liquidity hunt.
+    We check:
+    1. Swing extremes: higher highs for bearish, lower lows for bullish
+    2. Current candle breaks these extremes
+    3. Directional alignment with requested direction
+    """
     prepared = prepare_dataframe(df)
     if len(prepared) < 5:
         return None
+    
     current = prepared.iloc[-1]
-
-    # Build ordered swings using a stronger pivot (left/right window)
-    def get_recent_swings(window: int = SWING_LOOKBACK + 10, left: int | None = None, right: int | None = None):
-        swings: list[tuple[int, str, float]] = []  # (index, 'H'|'L', value)
-        if left is None:
-            left = SWING_LEFT
-        if right is None:
-            right = SWING_RIGHT
-        start = max(left, len(prepared) - window - 1)
-        end = len(prepared) - right
-        for i in range(start, end):
-            if i - left < 0 or i + right >= len(prepared):
-                continue
-            # check pivot high
-            left_max = prepared["high"].iloc[i - left : i].max()
-            right_max = prepared["high"].iloc[i + 1 : i + 1 + right].max()
-            if prepared["high"].iloc[i] > left_max and prepared["high"].iloc[i] > right_max:
-                swings.append((i, "H", float(prepared["high"].iloc[i])))
-                continue
-            # check pivot low
-            left_min = prepared["low"].iloc[i - left : i].min()
-            right_min = prepared["low"].iloc[i + 1 : i + 1 + right].min()
-            if prepared["low"].iloc[i] < left_min and prepared["low"].iloc[i] < right_min:
-                swings.append((i, "L", float(prepared["low"].iloc[i])))
-        return swings
-
-    swings = get_recent_swings()
-
-    # analyze ordered swings for alternating structure (H L H L ...)
-    def alternating_sequence(sw):
-        # collapse consecutive same-type swings, keep the most extreme among them
-        seq: list[tuple[int, str, float]] = []
-        for s in sw:
-            if not seq or seq[-1][1] != s[1]:
-                seq.append(s)
-            else:
-                # same type as previous — keep the extreme
-                prev_idx, prev_t, prev_v = seq[-1]
-                _, cur_t, cur_v = s
-                if cur_t == "H":
-                    # keep the higher high
-                    if cur_v > prev_v:
-                        seq[-1] = s
-                else:
-                    # keep the lower low
-                    if cur_v < prev_v:
-                        seq[-1] = s
-        return seq
-
-    seq = alternating_sequence(swings)
-
-    def detect_structure_from_seq(sq, lookback_windows: int = MSS_LOOKBACK_SWINGS):
-        # scan recent subsequences (length 4) within the last `lookback_windows` swings
-        if len(sq) < 4:
-            return None
-        start = max(0, len(sq) - lookback_windows)
-        # iterate from newest subsequence to oldest to return freshest confirmed structure
-        end = len(sq) - 4
-        for i in range(end, start - 1, -1):
-            tail = sq[i : i + 4]
-            types = [t for (_, t, _) in tail]
-            if types == ["H", "L", "H", "L"]:
-                highs = [v for _, t, v in tail if t == "H"]
-                lows = [v for _, t, v in tail if t == "L"]
-                if len(highs) >= 2 and len(lows) >= 2 and highs[-1] > highs[-2] and lows[-1] > lows[-2]:
-                    last_low = tail[-1][2]
-                    return ("bullish", last_low)
-            if types == ["L", "H", "L", "H"]:
-                highs = [v for _, t, v in tail if t == "H"]
-                lows = [v for _, t, v in tail if t == "L"]
-                if len(highs) >= 2 and len(lows) >= 2 and highs[-1] < highs[-2] and lows[-1] < lows[-2]:
-                    last_high = tail[-1][2]
-                    return ("bearish", last_high)
-        return None
-
-    struct = detect_structure_from_seq(seq)
-    strength = calculate_candle_strength(prepared)
-
-    # displacement check to avoid small candles being considered MSS
-    atr = calculate_atr(prepared)
-    bodies = (prepared["close"] - prepared["open"]).abs()
-    avg_body = bodies.rolling(10).mean().iloc[-2] if len(prepared) > 11 else float(bodies.mean())
-    avg_body = float(avg_body) if not pd.isna(avg_body) else 0.0
-    body = abs(current["close"] - current["open"])
-    # stronger displacement: require significant body AND momentum
-    displacement_pass = (body > max(atr * 0.8, avg_body * 1.2)) and (strength >= 0.3)
-
+    close = float(current["close"])
+    
+    # Get recent swing extremes (last 10-20 swings)
+    recent_high = _recent_swing_high(prepared, lookback=20)
+    recent_low = _recent_swing_low(prepared, lookback=20)
+    
+    # Check for structure pattern: higher highs OR lower lows in last few candles
+    if len(prepared) >= 10:
+        recent_highs = prepared["high"].iloc[-10:].values
+        recent_lows = prepared["low"].iloc[-10:].values
+        
+        # Detect higher highs or lower lows
+        has_hh = len(recent_highs) >= 3 and recent_highs[-1] > recent_highs[-3]
+        has_ll = len(recent_lows) >= 3 and recent_lows[-1] < recent_lows[-3]
+    else:
+        has_hh = False
+        has_ll = False
+    
     passed = False
     reason = "No valid MSS"
     break_level = None
-
-    if struct is not None:
-        kind, level = struct
-        break_level = level
-        if kind == "bullish":
-            # bullish prior structure -> look for breakdown of that HL (use close to avoid pokes)
-            breakdown = current["close"] < level * 0.999
-            passed = breakdown and displacement_pass
-            reason = "Bearish MSS (break of HL)" if passed else "No valid bearish MSS"
-        elif kind == "bearish":
-            # use close for breakout as well
-            breakout = current["close"] > level * 1.001
-            passed = breakout and displacement_pass
-            reason = "Bullish MSS (break of HH)" if passed else "No valid bullish MSS"
-
-    if direction == "SHORT":
-        return {"type": "MSS", "direction": "SHORT", "passed": passed and struct is not None and kind == "bullish", "break_level": break_level, "reason": reason}
-
+    
     if direction == "LONG":
-        return {"type": "MSS", "direction": "LONG", "passed": passed and struct is not None and kind == "bearish", "break_level": break_level, "reason": reason}
-    return None
+        # LONG: look for lower lows (bearish structure) that gets broken on upside
+        # Current should close above recent high or break above recent significant level
+        if has_ll and close > recent_high * 0.9995:
+            passed = True
+            reason = "Bullish MSS: lower lows + break above recent high"
+            break_level = recent_high
+        elif close > recent_high and has_ll:
+            passed = True
+            reason = "Bullish MSS: break of recent high with lower lows"
+            break_level = recent_high
+            
+    elif direction == "SHORT":
+        # SHORT: look for higher highs (bullish structure) that gets broken on downside
+        # Current should close below recent low or break below recent significant level
+        if has_hh and close < recent_low * 1.0005:
+            passed = True
+            reason = "Bearish MSS: higher highs + break below recent low"
+            break_level = recent_low
+        elif close < recent_low and has_hh:
+            passed = True
+            reason = "Bearish MSS: break of recent low with higher highs"
+            break_level = recent_low
+    
+    return {
+        "type": "MSS",
+        "direction": direction,
+        "passed": passed,
+        "break_level": break_level,
+        "reason": reason,
+    }

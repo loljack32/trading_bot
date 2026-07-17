@@ -59,16 +59,20 @@ export default {
 
       if (state) {
         try {
-          await writePositionStateToGithub(env, state);
+              console.log('Worker: attempting to write position state to GitHub', state);
+              const ghResp = await writePositionStateToGithub(env, state);
+              console.log('Worker: writePositionStateToGithub completed');
         } catch (writeError) {
-          console.error('Failed to save state to GitHub:', writeError);
-          responseText += '\n⚠️ Не удалось сохранить состояние: ' + String(writeError.message);
+              console.error('Failed to save state to GitHub:', writeError);
+              responseText += '\n⚠️ Не удалось сохранить состояние: ' + String(writeError.message);
         }
       }
 
       if (env.BOT_TOKEN) {
         try {
+          console.log('Worker: sending Telegram reply to', chatId);
           await sendTelegramMessage(env.BOT_TOKEN, chatId, responseText);
+          console.log('Worker: Telegram reply sent to', chatId);
         } catch (sendError) {
           console.error('Failed to send Telegram message:', sendError);
           responseText += '\n⚠️ Не удалось отправить ответ в Telegram: ' + String(sendError.message);
@@ -157,10 +161,13 @@ async function writePositionStateToGithub(env, state) {
     body: JSON.stringify(body),
   });
 
+  console.log('GitHub PUT response status:', response.status);
   if (!response.ok) {
     const errText = await response.text();
+    console.error('GitHub update body:', errText);
     throw new Error(`GitHub update failed: ${response.status} ${errText}`);
   }
+  return await response.json();
 }
 
 async function sendTelegramMessage(botToken, chatId, text) {
