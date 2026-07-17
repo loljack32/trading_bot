@@ -515,6 +515,8 @@ if state != "live":
 
 
 
+print(f"{symbol} {timeframe}: {len(df)} candles")
+
                 return df
 
 
