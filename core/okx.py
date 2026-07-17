@@ -1,9 +1,18 @@
+# ============================================================
+# core/okx.py
+# OKX API Client
+# ============================================================
+
+
 import requests
 import pandas as pd
 import time
 
 
+
 BASE_URL = "https://www.okx.com"
+
+
 
 
 
@@ -11,6 +20,7 @@ class OKXClient:
 
 
     def __init__(self):
+
 
         self.headers = {
 
@@ -22,9 +32,10 @@ class OKXClient:
 
 
 
-    # =====================================
+
+    # ========================================================
     # OHLCV
-    # =====================================
+    # ========================================================
 
 
     def get_ohlcv(
@@ -45,6 +56,7 @@ class OKXClient:
             f"{BASE_URL}/api/v5/market/candles"
 
         )
+
 
 
         params = {
@@ -90,14 +102,18 @@ class OKXClient:
 
 
                     print(
+
                         "OKX HTTP ERROR:",
+
                         response.status_code
+
                     )
 
 
                     time.sleep(2)
 
                     continue
+
 
 
 
@@ -110,8 +126,11 @@ class OKXClient:
 
 
                     print(
+
                         "OKX API ERROR:",
+
                         data
+
                     )
 
 
@@ -121,8 +140,11 @@ class OKXClient:
 
 
                 candles = data.get(
+
                     "data",
+
                     []
+
                 )
 
 
@@ -130,6 +152,7 @@ class OKXClient:
                 if not candles:
 
                     return None
+
 
 
 
@@ -224,9 +247,17 @@ class OKXClient:
 
 
 
+                # FIX FutureWarning
+
                 df["timestamp"] = pd.to_datetime(
 
-                    df["timestamp"],
+                    pd.to_numeric(
+
+                        df["timestamp"],
+
+                        errors="coerce"
+
+                    ),
 
                     unit="ms"
 
@@ -236,8 +267,7 @@ class OKXClient:
 
 
 
-
-                # старая -> новая
+                # старая свеча -> новая
 
                 df = df.sort_values(
 
@@ -258,9 +288,10 @@ class OKXClient:
 
 
 
-                # убираем текущую незакрытую свечу
+                # удаляем незакрытую свечу
 
                 if len(df) > 1:
+
 
                     df = df.iloc[:-1]
 
@@ -292,6 +323,7 @@ class OKXClient:
 
 
 
+
         return None
 
 
@@ -299,9 +331,10 @@ class OKXClient:
 
 
 
-    # =====================================
-    # Ticker
-    # =====================================
+
+    # ========================================================
+    # TICKER
+    # ========================================================
 
 
     def get_ticker(
@@ -325,9 +358,11 @@ class OKXClient:
 
 
             "instId":
+
                 symbol
 
         }
+
 
 
 
@@ -337,6 +372,8 @@ class OKXClient:
             response = requests.get(
 
                 url,
+
+                headers=self.headers,
 
                 params=params,
 
@@ -352,11 +389,14 @@ class OKXClient:
 
             if data.get("code") != "0":
 
+
                 return None
 
 
 
             return data["data"][0]
+
+
 
 
 
@@ -373,3 +413,272 @@ class OKXClient:
 
 
             return None
+
+
+
+
+
+
+
+    # ========================================================
+    # TOP SYMBOLS BY 24H VOLUME
+    # ========================================================
+
+
+    def get_top_symbols(
+
+            self,
+
+            limit=100
+
+    ):
+
+
+        url = (
+
+            f"{BASE_URL}/api/v5/market/tickers"
+
+        )
+
+
+
+        params = {
+
+
+            "instType":
+
+                "SWAP"
+
+        }
+
+
+
+
+
+        try:
+
+
+            response = requests.get(
+
+                url,
+
+                headers=self.headers,
+
+                params=params,
+
+                timeout=15
+
+            )
+
+
+
+
+
+            if response.status_code != 200:
+
+
+                print(
+
+                    "OKX TICKERS HTTP ERROR:",
+
+                    response.status_code
+
+                )
+
+
+                return []
+
+
+
+
+
+
+            data = response.json()
+
+
+
+
+
+            if data.get("code") != "0":
+
+
+                print(
+
+                    "OKX TICKERS ERROR:",
+
+                    data
+
+                )
+
+
+                return []
+
+
+
+
+
+
+
+            tickers = data.get(
+
+                "data",
+
+                []
+
+            )
+
+
+
+
+
+            symbols = []
+
+
+
+
+
+
+            for item in tickers:
+
+
+
+                inst_id = item.get(
+
+                    "instId"
+
+                )
+
+
+
+
+                if not inst_id:
+
+
+                    continue
+
+
+
+
+
+                # только USDT perpetual
+
+
+                if not inst_id.endswith(
+
+                    "-USDT-SWAP"
+
+                ):
+
+
+                    continue
+
+
+
+
+
+                volume = float(
+
+                    item.get(
+
+                        "volCcy24h",
+
+                        0
+
+                    )
+
+                )
+
+
+
+
+
+                symbols.append(
+
+                    {
+
+                        "symbol":
+
+                            inst_id.replace(
+
+                                "-SWAP",
+
+                                ""
+
+                            ),
+
+
+                        "volume":
+
+                            volume
+
+                    }
+
+                )
+
+
+
+
+
+
+
+            symbols.sort(
+
+                key=lambda x: x["volume"],
+
+                reverse=True
+
+            )
+
+
+
+
+
+
+
+            result = [
+
+                x["symbol"]
+
+                for x in symbols[:limit]
+
+            ]
+
+
+
+
+
+
+
+            print(
+
+                "TOP SYMBOLS LOADED:",
+
+                len(result)
+
+            )
+
+
+
+
+
+            return result
+
+
+
+
+
+
+
+        except Exception as e:
+
+
+            print(
+
+                "TOP SYMBOLS ERROR:",
+
+                e
+
+            )
+
+
+            return []
