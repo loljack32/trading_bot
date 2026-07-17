@@ -146,10 +146,13 @@ class OKXClient:
 
                 # пропускаем неактивные
 
-                state = item.get("state", "live")
+                                state = item.get(
+                    "state",
+                    "live"
+                )
 
-if state != "live":
-    continue
+                if state != "live":
+                    continue
 
 
 
@@ -507,15 +510,13 @@ if state != "live":
 
 
 
-                time.sleep(
-
+                                time.sleep(
                     REQUEST_DELAY
-
                 )
 
-
-
-print(f"{symbol} {timeframe}: {len(df)} candles")
+                print(
+                    f"{symbol} {timeframe}: {len(df)} candles"
+                )
 
                 return df
 
