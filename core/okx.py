@@ -1,12 +1,19 @@
 # ============================================================
 # core/okx.py
-# OKX API Client
+# OKX API CLIENT
 # ============================================================
 
 
 import requests
 import pandas as pd
 import time
+
+
+from config import (
+    TOP_SYMBOLS_LIMIT,
+    QUOTE_CURRENCY,
+    REQUEST_DELAY
+)
 
 
 
@@ -19,6 +26,7 @@ BASE_URL = "https://www.okx.com"
 class OKXClient:
 
 
+
     def __init__(self):
 
 
@@ -28,6 +36,210 @@ class OKXClient:
             "application/json"
 
         }
+
+
+
+
+
+    # ========================================================
+    # GET TOP SYMBOLS BY VOLUME
+    # ========================================================
+
+
+    def get_top_symbols(self):
+
+
+        url = (
+
+            f"{BASE_URL}/api/v5/market/tickers"
+
+        )
+
+
+        params = {
+
+
+            "instType":
+
+            "SWAP"
+
+        }
+
+
+
+
+        try:
+
+
+            response = requests.get(
+
+                url,
+
+                headers=self.headers,
+
+                params=params,
+
+                timeout=15
+
+            )
+
+
+
+            data = response.json()
+
+
+
+            if data.get("code") != "0":
+
+
+                print(
+
+                    "OKX ticker error:",
+
+                    data
+
+                )
+
+
+                return []
+
+
+
+
+
+            markets = []
+
+
+
+            for item in data.get(
+                "data",
+                []
+            ):
+
+
+
+                symbol = item.get(
+                    "instId"
+                )
+
+
+
+                # только USDT пары
+
+                if not symbol.endswith(
+                    f"-{QUOTE_CURRENCY}-SWAP"
+                ):
+
+                    continue
+
+
+
+
+
+                volume = float(
+
+                    item.get(
+
+                        "volCcy24h",
+
+                        0
+
+                    )
+
+                )
+
+
+
+                markets.append(
+
+                    (
+
+                        symbol,
+
+                        volume
+
+                    )
+
+                )
+
+
+
+
+
+            # сортировка по объёму
+
+            markets.sort(
+
+                key=lambda x: x[1],
+
+                reverse=True
+
+            )
+
+
+
+
+
+            symbols = []
+
+
+
+            for symbol, volume in markets[
+
+                :TOP_SYMBOLS_LIMIT
+
+            ]:
+
+
+                clean = symbol.replace(
+
+                    "-SWAP",
+
+                    ""
+
+                )
+
+
+                symbols.append(
+
+                    clean
+
+                )
+
+
+
+
+
+            print(
+
+                "Loaded symbols:",
+
+                len(symbols)
+
+            )
+
+
+            return symbols
+
+
+
+
+
+        except Exception as e:
+
+
+            print(
+
+                "Symbol loading error:",
+
+                e
+
+            )
+
+
+            return []
+
+
 
 
 
@@ -63,15 +275,18 @@ class OKXClient:
 
 
             "instId":
-                symbol,
+
+            symbol,
 
 
             "bar":
-                timeframe,
+
+            timeframe,
 
 
             "limit":
-                limit
+
+            limit
 
         }
 
@@ -98,26 +313,6 @@ class OKXClient:
 
 
 
-                if response.status_code != 200:
-
-
-                    print(
-
-                        "OKX HTTP ERROR:",
-
-                        response.status_code
-
-                    )
-
-
-                    time.sleep(2)
-
-                    continue
-
-
-
-
-
                 data = response.json()
 
 
@@ -127,7 +322,7 @@ class OKXClient:
 
                     print(
 
-                        "OKX API ERROR:",
+                        "OKX candle error:",
 
                         data
 
@@ -135,6 +330,7 @@ class OKXClient:
 
 
                     return None
+
 
 
 
@@ -165,6 +361,7 @@ class OKXClient:
                 for candle in candles:
 
 
+
                     rows.append(
 
                         [
@@ -184,6 +381,7 @@ class OKXClient:
                         ]
 
                     )
+
 
 
 
@@ -215,6 +413,7 @@ class OKXClient:
 
 
 
+
                 numeric = [
 
                     "open",
@@ -228,6 +427,7 @@ class OKXClient:
                     "volume"
 
                 ]
+
 
 
 
@@ -246,16 +446,11 @@ class OKXClient:
 
 
 
-
-                # FIX FutureWarning
-
                 df["timestamp"] = pd.to_datetime(
 
                     pd.to_numeric(
 
-                        df["timestamp"],
-
-                        errors="coerce"
+                        df["timestamp"]
 
                     ),
 
@@ -267,7 +462,6 @@ class OKXClient:
 
 
 
-                # старая свеча -> новая
 
                 df = df.sort_values(
 
@@ -287,15 +481,22 @@ class OKXClient:
 
 
 
-
-                # удаляем незакрытую свечу
+                # удаляем текущую свечу
 
                 if len(df) > 1:
-
 
                     df = df.iloc[:-1]
 
 
+
+
+
+
+                time.sleep(
+
+                    REQUEST_DELAY
+
+                )
 
 
 
@@ -310,7 +511,7 @@ class OKXClient:
 
                 print(
 
-                    "OKX ERROR:",
+                    "OHLCV error:",
 
                     e
 
@@ -318,7 +519,6 @@ class OKXClient:
 
 
                 time.sleep(2)
-
 
 
 
@@ -359,7 +559,7 @@ class OKXClient:
 
             "instId":
 
-                symbol
+            symbol
 
         }
 
@@ -372,8 +572,6 @@ class OKXClient:
             response = requests.get(
 
                 url,
-
-                headers=self.headers,
 
                 params=params,
 
@@ -388,7 +586,6 @@ class OKXClient:
 
 
             if data.get("code") != "0":
-
 
                 return None
 
@@ -413,272 +610,3 @@ class OKXClient:
 
 
             return None
-
-
-
-
-
-
-
-    # ========================================================
-    # TOP SYMBOLS BY 24H VOLUME
-    # ========================================================
-
-
-    def get_top_symbols(
-
-            self,
-
-            limit=100
-
-    ):
-
-
-        url = (
-
-            f"{BASE_URL}/api/v5/market/tickers"
-
-        )
-
-
-
-        params = {
-
-
-            "instType":
-
-                "SWAP"
-
-        }
-
-
-
-
-
-        try:
-
-
-            response = requests.get(
-
-                url,
-
-                headers=self.headers,
-
-                params=params,
-
-                timeout=15
-
-            )
-
-
-
-
-
-            if response.status_code != 200:
-
-
-                print(
-
-                    "OKX TICKERS HTTP ERROR:",
-
-                    response.status_code
-
-                )
-
-
-                return []
-
-
-
-
-
-
-            data = response.json()
-
-
-
-
-
-            if data.get("code") != "0":
-
-
-                print(
-
-                    "OKX TICKERS ERROR:",
-
-                    data
-
-                )
-
-
-                return []
-
-
-
-
-
-
-
-            tickers = data.get(
-
-                "data",
-
-                []
-
-            )
-
-
-
-
-
-            symbols = []
-
-
-
-
-
-
-            for item in tickers:
-
-
-
-                inst_id = item.get(
-
-                    "instId"
-
-                )
-
-
-
-
-                if not inst_id:
-
-
-                    continue
-
-
-
-
-
-                # только USDT perpetual
-
-
-                if not inst_id.endswith(
-
-                    "-USDT-SWAP"
-
-                ):
-
-
-                    continue
-
-
-
-
-
-                volume = float(
-
-                    item.get(
-
-                        "volCcy24h",
-
-                        0
-
-                    )
-
-                )
-
-
-
-
-
-                symbols.append(
-
-                    {
-
-                        "symbol":
-
-                            inst_id.replace(
-
-                                "-SWAP",
-
-                                ""
-
-                            ),
-
-
-                        "volume":
-
-                            volume
-
-                    }
-
-                )
-
-
-
-
-
-
-
-            symbols.sort(
-
-                key=lambda x: x["volume"],
-
-                reverse=True
-
-            )
-
-
-
-
-
-
-
-            result = [
-
-                x["symbol"]
-
-                for x in symbols[:limit]
-
-            ]
-
-
-
-
-
-
-
-            print(
-
-                "TOP SYMBOLS LOADED:",
-
-                len(result)
-
-            )
-
-
-
-
-
-            return result
-
-
-
-
-
-
-
-        except Exception as e:
-
-
-            print(
-
-                "TOP SYMBOLS ERROR:",
-
-                e
-
-            )
-
-
-            return []
