@@ -1,4 +1,5 @@
 import requests
+import time
 
 
 BASE_URL = "https://api.geckoterminal.com/api/v2"
@@ -14,11 +15,10 @@ class MarketScanner:
             "accept": "application/json"
         }
 
+        self.cache = {}
 
 
-    # =====================================
-    # Получение топовых пулов сети
-    # =====================================
+
 
     def get_top_pools(
             self,
@@ -27,194 +27,202 @@ class MarketScanner:
     ):
 
 
+        cache_key = network
+
+
+
+        # используем кэш
+        if cache_key in self.cache:
+
+            return self.cache[cache_key][:limit]
+
+
+
         url = (
             f"{BASE_URL}/networks/"
             f"{network}/pools"
         )
 
 
+
         params = {
-
             "page": 1
-
         }
 
 
 
-        try:
+
+        for attempt in range(3):
 
 
-            response = requests.get(
-
-                url,
-
-                headers=self.headers,
-
-                params=params,
-
-                timeout=15
-
-            )
+            try:
 
 
+                response = requests.get(
 
-            if response.status_code != 200:
+                    url,
 
+                    headers=self.headers,
 
-                print(
-                    "Gecko pools error:",
-                    response.status_code
-                )
+                    params=params,
 
+                    timeout=15
 
-                return []
-
-
-
-            result = response.json()
-
-
-
-            pools = []
-
-
-
-            for item in result.get(
-                    "data",
-                    []
-            ):
-
-
-
-                attributes = item.get(
-                    "attributes",
-                    {}
                 )
 
 
 
-                address = attributes.get(
-                    "address"
-                )
+                if response.status_code == 429:
 
 
+                    wait = 10 * (attempt + 1)
 
-                if not address:
+                    print(
+                        f"Rate limit. Waiting {wait}s"
+                    )
+
+                    time.sleep(wait)
 
                     continue
 
 
 
-                name = attributes.get(
-                    "name",
-                    "UNKNOWN"
-                )
+                if response.status_code != 200:
 
 
+                    print(
 
-                liquidity = self.safe_float(
+                        "Gecko pools error:",
 
-                    attributes.get(
-                        "reserve_in_usd"
+                        response.status_code
+
                     )
 
-                )
+
+                    return []
 
 
 
-                volume = self.safe_float(
+                data = response.json()
 
-                    attributes
-                    .get(
-                        "volume_usd",
-                        0
+
+
+                pools = []
+
+
+
+                for item in data.get(
+                    "data",
+                    []
+                ):
+
+
+                    attr = item.get(
+                        "attributes",
+                        {}
                     )
 
-                )
+
+
+                    address = attr.get(
+                        "address"
+                    )
+
+
+                    if not address:
+
+                        continue
 
 
 
-                price_change = attributes.get(
-                    "price_change_percentage",
-                    {}
-                )
+                    liquidity = self.safe_float(
+
+                        attr.get(
+                            "reserve_in_usd"
+                        )
+
+                    )
 
 
 
-                pools.append(
+                    volume = self.safe_float(
 
-                    {
+                        attr.get(
+                            "volume_usd"
+                        )
 
-
-                    "name":
-                        name,
-
-
-                    "network":
-                        network,
-
-
-                    "pool":
-                        address,
-
-
-                    "liquidity":
-                        liquidity,
-
-
-                    "volume":
-                        volume,
-
-
-                    "price_change":
-                        price_change
-
-
-                    }
-
-                )
+                    )
 
 
 
+                    pools.append(
 
-            # Сначала самые ликвидные
+                        {
 
-            pools.sort(
+                        "name":
+                            attr.get(
+                                "name",
+                                "UNKNOWN"
+                            ),
 
-                key=lambda x:
-                (
+
+                        "network":
+                            network,
+
+
+                        "pool":
+                            address,
+
+
+                        "liquidity":
+                            liquidity,
+
+
+                        "volume":
+                            volume
+
+                        }
+
+                    )
+
+
+
+                pools.sort(
+
+                    key=lambda x:
                     x["liquidity"],
-                    x["volume"]
-                ),
 
-                reverse=True
+                    reverse=True
 
-            )
+                )
 
 
 
-            return pools[:limit]
+                self.cache[network] = pools
 
 
 
-        except Exception as e:
-
-
-            print(
-                "Market scanner error:",
-                e
-            )
-
-
-            return []
+                return pools[:limit]
 
 
 
+            except Exception as e:
 
 
-    # =====================================
-    # Безопасное преобразование чисел
-    # =====================================
+                print(
+                    "Market error:",
+                    e
+                )
+
+
+                time.sleep(5)
+
+
+
+        return []
+
+
+
 
 
     def safe_float(
@@ -225,10 +233,10 @@ class MarketScanner:
 
         try:
 
-            return float(value or 0)
-
+            return float(
+                value or 0
+            )
 
         except:
-
 
             return 0
