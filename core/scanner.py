@@ -40,12 +40,25 @@ okx = OKXClient()
 
 
 
-# ============================================================
-# HTF TREND
-# ============================================================
+# кеш HTF тренда
 
+htf_cache = {}
+
+
+
+
+
+# ============================================================
+# GET HIGHER TIMEFRAME TREND
+# ============================================================
 
 def get_higher_trend(symbol):
+
+
+    if symbol in htf_cache:
+
+        return htf_cache[symbol]
+
 
 
     try:
@@ -62,6 +75,7 @@ def get_higher_trend(symbol):
         )
 
 
+
         if candles is None:
 
             return None
@@ -74,11 +88,19 @@ def get_higher_trend(symbol):
 
 
 
-        return ema200_trend(
+        trend = ema200_trend(
 
             candles
 
         )
+
+
+
+        htf_cache[symbol] = trend
+
+
+
+        return trend
 
 
 
@@ -87,7 +109,7 @@ def get_higher_trend(symbol):
 
         print(
 
-            "HTF error",
+            "HTF ERROR",
 
             symbol,
 
@@ -112,15 +134,27 @@ def get_higher_trend(symbol):
 def scan_market(timeframe):
 
 
+    global htf_cache
+
+
+    htf_cache = {}
+
+
+
     signals = []
 
 
 
+    print()
+
     print(
 
-        f"Scanning {timeframe}"
+        "Scanning",
+
+        timeframe
 
     )
+
 
 
 
@@ -136,7 +170,7 @@ def scan_market(timeframe):
 
         print(
 
-            "Symbol loading error",
+            "SYMBOL ERROR",
 
             e
 
@@ -150,6 +184,13 @@ def scan_market(timeframe):
 
 
     if not symbols:
+
+
+        print(
+
+            "No symbols"
+
+        )
 
 
         return []
@@ -170,7 +211,18 @@ def scan_market(timeframe):
 
 
 
+    checked = 0
+
+    setups = 0
+
+    rejected = 0
+
+
+
+
+
     for symbol in symbols:
+
 
 
         try:
@@ -202,11 +254,15 @@ def scan_market(timeframe):
 
 
 
+            checked += 1
 
 
-            # ==========================
-            # HTF
-            # ==========================
+
+
+
+            # =================================================
+            # HTF FILTER
+            # =================================================
 
 
             higher_trend = None
@@ -235,9 +291,10 @@ def scan_market(timeframe):
 
 
 
-            # ==========================
-            # CONDITIONS
-            # ==========================
+
+            # =================================================
+            # INDICATORS
+            # =================================================
 
 
             vol = volume_confirmation(
@@ -279,10 +336,18 @@ def scan_market(timeframe):
 
 
 
+
+
             direction = None
 
 
 
+
+
+
+            # =================================================
+            # ENTRY LOGIC
+            # =================================================
 
 
             if bull_sfp and bull_mss:
@@ -296,6 +361,7 @@ def scan_market(timeframe):
 
 
                 direction = "SHORT"
+
 
 
 
@@ -314,7 +380,9 @@ def scan_market(timeframe):
 
 
 
+
             if direction is None:
+
 
                 continue
 
@@ -322,10 +390,29 @@ def scan_market(timeframe):
 
 
 
+            setups += 1
 
-            # ==========================
-            # FILTER
-            # ==========================
+
+
+            print()
+
+            print(
+
+                "SETUP",
+
+                symbol,
+
+                direction
+
+            )
+
+
+
+
+
+            # =================================================
+            # QUALITY
+            # =================================================
 
 
             passed, filter_score = quality_check(
@@ -340,7 +427,27 @@ def scan_market(timeframe):
 
 
 
+
+            print(
+
+                "QUALITY",
+
+                filter_score,
+
+                "PASS",
+
+                passed
+
+            )
+
+
+
+
+
             if not passed:
+
+
+                rejected += 1
 
                 continue
 
@@ -349,10 +456,9 @@ def scan_market(timeframe):
 
 
 
-
-            # ==========================
-            # FINAL SCORE
-            # ==========================
+            # =================================================
+            # SCORE
+            # =================================================
 
 
             base_score = signal_score(
@@ -365,41 +471,20 @@ def scan_market(timeframe):
 
 
 
+
             final_score = round(
 
-                base_score * 0.6
+                (
+
+                    base_score * 0.6
+
+                )
 
                 +
 
-                filter_score * 0.4
+                (
 
-            )
-
-
-
-
-            if final_score < MIN_SIGNAL_SCORE:
-
-                continue
-
-
-
-
-
-
-            signals.append(
-
-                create_signal(
-
-                    symbol,
-
-                    candles,
-
-                    direction,
-
-                    final_score,
-
-                    timeframe
+                    filter_score * 0.4
 
                 )
 
@@ -408,12 +493,68 @@ def scan_market(timeframe):
 
 
 
+            print(
+
+                "SCORE",
+
+                base_score,
+
+                final_score
+
+            )
+
+
+
+
+
+            if final_score < MIN_SIGNAL_SCORE:
+
+
+                print(
+
+                    "LOW SCORE"
+
+                )
+
+
+                continue
+
+
+
+
+
+
+
+            signal = create_signal(
+
+                symbol,
+
+                candles,
+
+                direction,
+
+                final_score,
+
+                timeframe
+
+            )
+
+
+
+            signals.append(
+
+                signal
+
+            )
+
+
+
         except Exception as e:
 
 
             print(
 
-                "Scan error",
+                "SCAN ERROR",
 
                 symbol,
 
@@ -422,13 +563,11 @@ def scan_market(timeframe):
             )
 
 
-            continue
 
 
-
-
-
-    # лучшие сверху
+    # =================================================
+    # SORT
+    # =================================================
 
 
     signals.sort(
@@ -441,6 +580,37 @@ def scan_market(timeframe):
 
     )
 
+
+
+
+
+    print()
+
+    print(
+
+        "Checked:",
+
+        checked
+
+    )
+
+
+    print(
+
+        "Setups:",
+
+        setups
+
+    )
+
+
+    print(
+
+        "Rejected:",
+
+        rejected
+
+    )
 
 
     print(
@@ -490,7 +660,9 @@ def create_signal(
 
 
 
+
     if direction == "LONG":
+
 
 
         stop = float(
@@ -504,15 +676,39 @@ def create_signal(
         )
 
 
+
         risk = entry - stop
 
 
 
-        target = entry + risk * 2
+
+        if risk <= 0:
+
+
+            stop = entry * 0.99
+
+
+            risk = entry - stop
+
+
+
+
+        target = (
+
+            entry
+
+            +
+
+            risk * 2
+
+        )
+
+
 
 
 
     else:
+
 
 
         stop = float(
@@ -526,11 +722,33 @@ def create_signal(
         )
 
 
+
         risk = stop - entry
 
 
 
-        target = entry - risk * 2
+
+        if risk <= 0:
+
+
+            stop = entry * 1.01
+
+
+            risk = stop - entry
+
+
+
+
+        target = (
+
+            entry
+
+            -
+
+            risk * 2
+
+        )
+
 
 
 
