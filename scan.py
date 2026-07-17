@@ -15,8 +15,38 @@ logging.basicConfig(
     ]
 )
 
+def check_15m_mss(candles_15m, direction):
+    """
+    Проверяет слом структуры (MSS) на 15м таймфрейме после SFP на 1H.
+    Использует предпоследнюю свечу [-2], чтобы избежать перерисовки текущей формирующейся свечи.
+    """
+    if len(candles_15m) < 10:
+        return False, 0
+    
+    highs = [c[2] for c in candles_15m]
+    lows = [c[3] for c in candles_15m]
+    closes = [c[4] for c in candles_15m]
+    
+    if direction == 'SHORT':
+        # 1. Находим максимум (шип SFP) в последних 4-5 свечах (это и есть 1H свеча с SFP)
+        wick_high = max(highs[-5:-1])
+        # 2. Находим структурный минимум ПЕРЕД этим шипом (диапазон от -9 до -5 свечей)
+        structural_low = min(lows[-9:-5])
+        # 3. Проверяем, закрылась ли последняя ПОЛНАЯ 15м свеча [-2] НИЖЕ структурного минимума
+        mss_confirmed = closes[-2] < structural_low
+        return mss_confirmed, structural_low
+        
+    elif direction == 'LONG':
+        # 1. Находим минимум (шип SFP) в последних 4-5 свечах
+        wick_low = min(lows[-5:-1])
+        # 2. Находим структурный максимум ПЕРЕД этим шипом
+        structural_high = max(highs[-9:-5])
+        # 3. Проверяем, закрылась ли последняя ПОЛНАЯ 15м свеча [-2] ВЫШЕ структурного максимума
+        mss_confirmed = closes[-2] > structural_high
+        return mss_confirmed, structural_high
+
 def scan():
-    logging.info("--- 🚀 НАЧАЛО УМНОГО СКАНИРОВАНИЯ (OKX LONG + SHORT) ---")
+    logging.info("--- 🚀 НАЧАЛО УМНОГО СКАНИРОВАНИЯ (OKX: SFP 1H + MSS 15m + Тренд 4H) ---")
     
     # 1. Читаем настройки
     try:
@@ -53,7 +83,6 @@ def scan():
         })
         
         tickers = exchange.fetch_tickers()
-        
         min_volume_usd = 50_000 
         
         valid_symbols = []
@@ -85,108 +114,112 @@ def scan():
         volume_usd = item['volume_usd']
         
         try:
+            # --- ШАГ 1: Проверка SFP на 1H ---
             candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             if len(candles_1h) < 10:
                 continue
                 
-            closes = [c[4] for c in candles_1h]
-            highs = [c[2] for c in candles_1h]
-            lows = [c[3] for c in candles_1h]
+            closes_1h = [c[4] for c in candles_1h]
+            highs_1h = [c[2] for c in candles_1h]
+            lows_1h = [c[3] for c in candles_1h]
             
-            recent_high = max(highs[-10:-1])
-            recent_low = min(lows[-10:-1])
+            recent_high_1h = max(highs_1h[-10:-1])
+            recent_low_1h = min(lows_1h[-10:-1])
             
-            last_high = highs[-1]
-            last_low = lows[-1]
-            last_close = closes[-1]
+            last_high_1h = highs_1h[-1]
+            last_low_1h = lows_1h[-1]
+            last_close_1h = closes_1h[-1]
             
-            # ИСПРАВЛЕННАЯ ЛОГИКА SFP (Swing Failure Pattern)
-            # Для 1H таймфрейма сам факт закрытия свечи внутри диапазона после пробоя уже является сильным сигналом.
-            # Проверка MSS на той же самой 1H свече математически противоречива, поэтому мы используем SFP + фильтр тренда 4H.
-            
-            is_short_sfp = (last_high > recent_high) and (last_close < recent_high)
-            is_long_sfp = (last_low < recent_low) and (last_close > recent_low)
+            is_short_sfp = (last_high_1h > recent_high_1h) and (last_close_1h < recent_high_1h)
+            is_long_sfp = (last_low_1h < recent_low_1h) and (last_close_1h > recent_low_1h)
             
             if not (is_short_sfp or is_long_sfp):
-                continue
+                continue # Если нет SFP, дальше не проверяем, экономим запросы
             
-            # Расчет среднего диапазона свечи для оценки качества фитиля
-            ranges = [h - l for h, l in zip(highs[-10:-1], lows[-10:-1])]
-            avg_range = sum(ranges) / len(ranges) if ranges else 1
+            # Расчет среднего диапазона для оценки фитиля
+            ranges_1h = [h - l for h, l in zip(highs_1h[-10:-1], lows_1h[-10:-1])]
+            avg_range_1h = sum(ranges_1h) / len(ranges_1h) if ranges_1h else 1
             
+            # --- ШАГ 2: Проверка тренда на 4H ---
             candles_4h = exchange.fetch_ohlcv(symbol, '4h', limit=50)
             closes_4h = [c[4] for c in candles_4h]
             sma_20_4h = sum(closes_4h[-20:]) / 20
             current_price_4h = closes_4h[-1]
             
-            # ПРОВЕРКА НА SHORT
+            # --- ШАГ 3: Проверка MSS на 15m (ТОЛЬКО если прошли 1H и 4H) ---
+            candles_15m = exchange.fetch_ohlcv(symbol, '15m', limit=20)
+            
+            # ЛОГИКА ДЛЯ SHORT
             if is_short_sfp:
-                current_wick = last_high - last_close
-                is_good_wick = (current_wick > avg_range * 1.5) and (current_wick < avg_range * 5.0)
-                # Для шорта по SFP лучше, чтобы общий тренд 4H был медвежьим или нейтральным (цена ниже или около SMA)
+                current_wick = last_high_1h - last_close_1h
+                is_good_wick = (current_wick > avg_range_1h * 1.2) # Чуть смягчил для 1H, главное наличие
                 is_bearish_4h = current_price_4h < sma_20_4h
                 
                 if is_good_wick and is_bearish_4h:
-                    logging.info(f"🎯 [{i}/{len(top_symbols)}] НАЙДЕН СЕТАП НА SHORT: {symbol}")
-                    # Детальный лог для проверки
-                    logging.info(f"   [DEBUG SHORT] last_high={last_high}, recent_high={recent_high}, last_close={last_close}")
-                    logging.info(f"   [DEBUG SHORT] wick={current_wick}, avg_range={avg_range}, 4h_price={current_price_4h}, 4h_sma={sma_20_4h}")
+                    mss_confirmed, struct_level = check_15m_mss(candles_15m, 'SHORT')
                     
-                    entry = last_close
-                    stop = last_high * 1.005 # 0.5% выше максимума фитиля
-                    dist = abs(stop - entry)
-                    
-                    risk_amount = balance * (risk_percent / 100)
-                    pos_size = (risk_amount / dist) * entry
-                    leverage = int(min(max(pos_size / balance, 1), 10)) # Гарантируем целое число
-                    coin_name = symbol.split('/')[0]
-                    
-                    found_signals.append({
-                        'type': 'SHORT',
-                        'symbol': coin_name,
-                        'entry': entry,
-                        'stop': stop,
-                        'pos_size': pos_size,
-                        'leverage': leverage,
-                        'risk': risk_amount,
-                        'trend': 'Медвежий (цена < SMA20 4H)',
-                        'volume_usd': volume_usd
-                    })
-                    continue
+                    if mss_confirmed:
+                        logging.info(f"🎯 [{i}/{len(top_symbols)}] НАЙДЕН СЕТАП НА SHORT: {symbol}")
+                        logging.info(f"   [DEBUG] SFP: high={last_high_1h:.2f}, close={last_close_1h:.2f} | 15m MSS: пробит уровень {struct_level:.2f}")
+                        
+                        entry = last_close_1h
+                        stop = last_high_1h * 1.005 
+                        dist = abs(stop - entry)
+                        
+                        risk_amount = balance * (risk_percent / 100)
+                        pos_size = (risk_amount / dist) * entry
+                        leverage = int(min(max(pos_size / balance, 1), 10))
+                        coin_name = symbol.split('/')[0]
+                        
+                        found_signals.append({
+                            'type': 'SHORT',
+                            'symbol': coin_name,
+                            'entry': entry,
+                            'stop': stop,
+                            'pos_size': pos_size,
+                            'leverage': leverage,
+                            'risk': risk_amount,
+                            'trend': 'Медвежий 4H + MSS 15m подтвержден',
+                            'volume_usd': volume_usd
+                        })
+                    else:
+                        logging.debug(f"   [SKIP SHORT] {symbol}: SFP есть, но MSS на 15m еще не сформирован.")
 
-            # ПРОВЕРКА НА LONG
-            if is_long_sfp:
-                current_wick = last_close - last_low
-                is_good_wick = (current_wick > avg_range * 1.5) and (current_wick < avg_range * 5.0)
-                # Для лонга по SFP лучше, чтобы общий тренд 4H был бычьим (цена выше SMA)
+            # ЛОГИКА ДЛЯ LONG
+            elif is_long_sfp:
+                current_wick = last_close_1h - last_low_1h
+                is_good_wick = (current_wick > avg_range_1h * 1.2)
                 is_bullish_4h = current_price_4h > sma_20_4h
                 
                 if is_good_wick and is_bullish_4h:
-                    logging.info(f"🎯 [{i}/{len(top_symbols)}] НАЙДЕН СЕТАП НА LONG: {symbol}")
-                    # Детальный лог для проверки
-                    logging.info(f"   [DEBUG LONG] last_low={last_low}, recent_low={recent_low}, last_close={last_close}")
-                    logging.info(f"   [DEBUG LONG] wick={current_wick}, avg_range={avg_range}, 4h_price={current_price_4h}, 4h_sma={sma_20_4h}")
+                    mss_confirmed, struct_level = check_15m_mss(candles_15m, 'LONG')
                     
-                    entry = last_close
-                    stop = last_low * 0.995 # 0.5% ниже минимума фитиля
-                    dist = abs(stop - entry)
-                    
-                    risk_amount = balance * (risk_percent / 100)
-                    pos_size = (risk_amount / dist) * entry
-                    leverage = int(min(max(pos_size / balance, 1), 10))
-                    coin_name = symbol.split('/')[0]
-                    
-                    found_signals.append({
-                        'type': 'LONG',
-                        'symbol': coin_name,
-                        'entry': entry,
-                        'stop': stop,
-                        'pos_size': pos_size,
-                        'leverage': leverage,
-                        'risk': risk_amount,
-                        'trend': 'Бычий (цена > SMA20 4H)',
-                        'volume_usd': volume_usd
-                    })
+                    if mss_confirmed:
+                        logging.info(f"🎯 [{i}/{len(top_symbols)}] НАЙДЕН СЕТАП НА LONG: {symbol}")
+                        logging.info(f"   [DEBUG] SFP: low={last_low_1h:.2f}, close={last_close_1h:.2f} | 15m MSS: пробит уровень {struct_level:.2f}")
+                        
+                        entry = last_close_1h
+                        stop = last_low_1h * 0.995 
+                        dist = abs(stop - entry)
+                        
+                        risk_amount = balance * (risk_percent / 100)
+                        pos_size = (risk_amount / dist) * entry
+                        leverage = int(min(max(pos_size / balance, 1), 10))
+                        coin_name = symbol.split('/')[0]
+                        
+                        found_signals.append({
+                            'type': 'LONG',
+                            'symbol': coin_name,
+                            'entry': entry,
+                            'stop': stop,
+                            'pos_size': pos_size,
+                            'leverage': leverage,
+                            'risk': risk_amount,
+                            'trend': 'Бычий 4H + MSS 15m подтвержден',
+                            'volume_usd': volume_usd
+                        })
+                    else:
+                        logging.debug(f"   [SKIP LONG] {symbol}: SFP есть, но MSS на 15m еще не сформирован.")
                     
         except Exception as e:
             logging.warning(f"   [WARNING] Ошибка при обработке {symbol}: {e}")
@@ -201,8 +234,8 @@ def scan():
         display_limit = 15
         signals_to_show = found_signals[:display_limit]
         
-        msg = "🚨 *УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + ТРЕНД 4H*\n\n"
-        msg += "📊 Отсортировано по объему 24ч (чем выше, тем надежнее):\n"
+        msg = "🚨 *УМНЫЙ СКАН: SFP (1H) + MSS (15m) + ТРЕНД (4H)*\n\n"
+        msg += "📊 Отсортировано по объему 24ч. MSS уже подтвержден ботом!\n"
         msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for i, sig in enumerate(signals_to_show, 1):
@@ -216,9 +249,9 @@ def scan():
                     f"   📈 Объем 24ч: `${vol_formatted}`\n\n")
             
         if len(found_signals) > display_limit:
-            msg += f"⚠️ _Показаны топ-{display_limit} из {len(found_signals)}. Остальные отфильтрованы._\n\n"
+            msg += f"⚠️ _Показаны топ-{display_limit} из {len(found_signals)}._\n\n"
             
-        msg += "⚠️ _Не забывай про риск-менеджмент! Проверяй график на 15м перед входом (жди слом структуры)._"
+        msg += "✅ _Сигналы уже прошли проверку слома структуры на 15м. Можно рассматривать вход!_"
         
         logging.info("📤 Отправляю сводный отчет в Telegram...")
         try:
@@ -236,8 +269,8 @@ def scan():
         no_signal_msg = (
             "🔍 *Сканирование завершено*\n\n"
             f"Проверено {len(top_symbols)} самых ликвидных пар на OKX.\n\n"
-            "Четких сигналов *SFP* с подтверждением тренда 4H и правильным фитилем не найдено.\n\n"
-            "✅ Это хорошо: рынок в шуме или боковике. Бот спас твой депозит от лишних сделок.\n\n"
+            "Четких сигналов *SFP (1H)* с подтверждением *MSS (15m)* и трендом *4H* не найдено.\n\n"
+            "✅ Это хорошо: рынок в шуме или боковике. Бот спас твой депозит.\n\n"
             "⏳ Жди следующего обновления!"
         )
         logging.info("📤 Отправляю сообщение 'Нет сигналов' в Telegram...")
