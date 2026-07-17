@@ -1,5 +1,13 @@
+# ============================================================
+# core/indicators.py
+# SFP MSS BOT
+# Advanced Market Structure Indicators
+# ============================================================
+
+
 import pandas as pd
 import numpy as np
+
 
 from config import (
     SWING_LOOKBACK,
@@ -9,11 +17,20 @@ from config import (
 
 
 
-# =====================================
+
+
+# ============================================================
 # VOLUME CONFIRMATION
-# =====================================
+# ============================================================
+
 
 def volume_confirmation(df):
+
+
+    if len(df) < 20:
+
+        return False
+
 
 
     avg_volume = (
@@ -21,42 +38,129 @@ def volume_confirmation(df):
         df["volume"]
         .rolling(20)
         .mean()
+        .iloc[-2]
+
+    )
+
+
+
+    current_volume = (
+
+        df["volume"]
         .iloc[-1]
 
     )
 
 
-    current = df["volume"].iloc[-1]
 
+    if pd.isna(avg_volume):
 
-    return current >= avg_volume * 0.8
-
-
+        return False
 
 
 
-# =====================================
-# SFP
-# =====================================
+    return (
 
-def bullish_sfp(df):
+        current_volume
+
+        >=
+
+        avg_volume * VOLUME_MULTIPLIER
+
+    )
 
 
-    candle = df.iloc[-2]
 
 
-    lows = (
+
+
+
+# ============================================================
+# SWING LEVELS
+# ============================================================
+
+
+def get_swing_high(df, lookback=SWING_LOOKBACK):
+
+
+    return (
+
+        df["high"]
+        .iloc[-lookback-1:-1]
+        .max()
+
+    )
+
+
+
+
+
+def get_swing_low(df, lookback=SWING_LOOKBACK):
+
+
+    return (
 
         df["low"]
-        .iloc[-20:-2]
+        .iloc[-lookback-1:-1]
         .min()
 
     )
 
 
-    wick = (
+
+
+
+
+
+# ============================================================
+# SFP
+# ============================================================
+
+
+def bullish_sfp(df):
+
+
+    if len(df) < 30:
+
+        return False
+
+
+
+    candle = df.iloc[-2]
+
+
+
+    swing_low = (
+
+        df["low"]
+        .iloc[-22:-2]
+        .min()
+
+    )
+
+
+
+    body = abs(
+
+        candle["close"]
+
+        -
 
         candle["open"]
+
+    )
+
+
+
+    lower_wick = (
+
+        min(
+
+            candle["open"],
+
+            candle["close"]
+
+        )
 
         -
 
@@ -66,41 +170,44 @@ def bullish_sfp(df):
 
 
 
-    body = abs(
-
-        candle["close"]
-
-        -
-
-        candle["open"]
-
-    )
-
-
-
-    if body == 0:
+    if body <= 0:
 
         return False
 
 
 
-    wick_ratio = wick / body
+    wick_ratio = lower_wick / body
 
 
 
     return (
 
-        candle["low"] < lows
+        candle["low"]
+
+        <
+
+        swing_low
 
         and
 
-        candle["close"] > candle["open"]
+        candle["close"]
+
+        >
+
+        candle["open"]
 
         and
 
-        wick_ratio >= MIN_WICK_PERCENT
+        wick_ratio
+
+        >=
+
+        MIN_WICK_PERCENT
 
     )
+
+
+
 
 
 
@@ -108,28 +215,24 @@ def bullish_sfp(df):
 def bearish_sfp(df):
 
 
+    if len(df) < 30:
+
+        return False
+
+
+
     candle = df.iloc[-2]
 
 
-    highs = (
+
+    swing_high = (
 
         df["high"]
-        .iloc[-20:-2]
+        .iloc[-22:-2]
         .max()
 
     )
 
-
-
-    wick = (
-
-        candle["high"]
-
-        -
-
-        candle["close"]
-
-    )
 
 
     body = abs(
@@ -144,27 +247,57 @@ def bearish_sfp(df):
 
 
 
-    if body == 0:
+    upper_wick = (
+
+        candle["high"]
+
+        -
+
+        max(
+
+            candle["open"],
+
+            candle["close"]
+
+        )
+
+    )
+
+
+
+    if body <= 0:
 
         return False
 
 
 
-    wick_ratio = wick / body
+    wick_ratio = upper_wick / body
 
 
 
     return (
 
-        candle["high"] > highs
+        candle["high"]
+
+        >
+
+        swing_high
 
         and
 
-        candle["close"] < candle["open"]
+        candle["close"]
+
+        <
+
+        candle["open"]
 
         and
 
-        wick_ratio >= MIN_WICK_PERCENT
+        wick_ratio
+
+        >=
+
+        MIN_WICK_PERCENT
 
     )
 
@@ -173,34 +306,66 @@ def bearish_sfp(df):
 
 
 
-# =====================================
-# MSS
-# =====================================
+
+
+# ============================================================
+# MARKET STRUCTURE SHIFT
+# ============================================================
+
 
 def bullish_mss(df):
+
+
+    if len(df) < 20:
+
+        return False
+
 
 
     last = df.iloc[-1]
 
 
-    previous_high = (
 
-        df["high"]
-        .iloc[-10:-1]
-        .max()
+    swing_high = get_swing_high(
+
+        df,
+
+        10
 
     )
 
 
+
+    previous_close = (
+
+        df["close"]
+
+        .iloc[-2]
+
+    )
+
+
+
     return (
+
+        previous_close
+
+        <=
+
+        swing_high
+
+        and
 
         last["close"]
 
         >
 
-        previous_high
+        swing_high
 
     )
+
+
+
 
 
 
@@ -208,25 +373,51 @@ def bullish_mss(df):
 def bearish_mss(df):
 
 
+    if len(df) < 20:
+
+        return False
+
+
+
     last = df.iloc[-1]
 
 
-    previous_low = (
 
-        df["low"]
-        .iloc[-10:-1]
-        .min()
+    swing_low = get_swing_low(
+
+        df,
+
+        10
 
     )
 
 
+
+    previous_close = (
+
+        df["close"]
+
+        .iloc[-2]
+
+    )
+
+
+
     return (
+
+        previous_close
+
+        >=
+
+        swing_low
+
+        and
 
         last["close"]
 
         <
 
-        previous_low
+        swing_low
 
     )
 
@@ -235,67 +426,17 @@ def bearish_mss(df):
 
 
 
-# =====================================
-# SIGNAL SCORE
-# =====================================
+
+# ============================================================
+# IMPULSE CANDLE
+# ============================================================
 
 
-def signal_score(df, direction):
+def impulse_confirmation(df):
 
-
-    score = 0
-
-
-
-    # MSS
-    if direction == "LONG":
-
-        if bullish_mss(df):
-
-            score += 35
-
-
-    else:
-
-        if bearish_mss(df):
-
-            score += 35
-
-
-
-
-    # SFP
-
-    if direction == "LONG":
-
-        if bullish_sfp(df):
-
-            score += 30
-
-
-    else:
-
-        if bearish_sfp(df):
-
-            score += 30
-
-
-
-
-
-    # volume
-
-    if volume_confirmation(df):
-
-        score += 20
-
-
-
-
-
-    # свеча импульс
 
     candle = df.iloc[-1]
+
 
 
     body = abs(
@@ -307,6 +448,7 @@ def signal_score(df, direction):
         candle["open"]
 
     )
+
 
 
     size = (
@@ -320,14 +462,121 @@ def signal_score(df, direction):
     )
 
 
-    if size > 0:
 
+    if size <= 0:
 
-        if body / size > 0.5:
-
-            score += 15
-
+        return False
 
 
 
-    return min(score,100)
+    return (
+
+        body / size >= 0.5
+
+    )
+
+
+
+
+
+
+
+# ============================================================
+# SIGNAL SCORE
+# ============================================================
+
+
+def signal_score(df, direction):
+
+
+    score = 0
+
+
+
+    # -------------------------
+    # MSS
+    # -------------------------
+
+
+    if direction == "LONG":
+
+
+        if bullish_mss(df):
+
+            score += 35
+
+
+
+    else:
+
+
+        if bearish_mss(df):
+
+            score += 35
+
+
+
+
+
+
+    # -------------------------
+    # SFP
+    # -------------------------
+
+
+    if direction == "LONG":
+
+
+        if bullish_sfp(df):
+
+            score += 25
+
+
+
+    else:
+
+
+        if bearish_sfp(df):
+
+            score += 25
+
+
+
+
+
+
+    # -------------------------
+    # Volume
+    # -------------------------
+
+
+    if volume_confirmation(df):
+
+        score += 20
+
+
+
+
+
+
+    # -------------------------
+    # Impulse
+    # -------------------------
+
+
+    if impulse_confirmation(df):
+
+        score += 20
+
+
+
+
+
+
+    return min(
+
+        score,
+
+        100
+
+    )
