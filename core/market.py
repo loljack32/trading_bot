@@ -11,17 +11,14 @@ class MarketScanner:
     def __init__(self):
 
         self.headers = {
-            "accept":
-            "application/json"
+            "accept": "application/json"
         }
 
 
 
-
-    # ===================================
+    # =====================================
     # Получение топовых пулов сети
-    # ===================================
-
+    # =====================================
 
     def get_top_pools(
             self,
@@ -31,24 +28,14 @@ class MarketScanner:
 
 
         url = (
-
             f"{BASE_URL}/networks/"
             f"{network}/pools"
-
         )
-
 
 
         params = {
 
-
-            "include":
-            "base_token,quote_token",
-
-
-            "page":
-            1
-
+            "page": 1
 
         }
 
@@ -65,7 +52,7 @@ class MarketScanner:
 
                 params=params,
 
-                timeout=10
+                timeout=15
 
             )
 
@@ -73,17 +60,18 @@ class MarketScanner:
 
             if response.status_code != 200:
 
+
                 print(
-                    "Pool API error",
+                    "Gecko pools error:",
                     response.status_code
                 )
+
 
                 return []
 
 
 
-
-            data = response.json()
+            result = response.json()
 
 
 
@@ -91,55 +79,52 @@ class MarketScanner:
 
 
 
-            for item in data.get(
+            for item in result.get(
                     "data",
                     []
-            )[:limit]:
+            ):
 
 
-                attr = (
-                    item
-                    .get(
-                        "attributes",
-                        {}
-                    )
+
+                attributes = item.get(
+                    "attributes",
+                    {}
                 )
 
 
 
-                pool_address = (
-                    attr
-                    .get(
-                        "address"
-                    )
+                address = attributes.get(
+                    "address"
                 )
 
 
 
-                name = (
-                    attr
-                    .get(
-                        "name"
-                    )
+                if not address:
+
+                    continue
+
+
+
+                name = attributes.get(
+                    "name",
+                    "UNKNOWN"
                 )
 
 
 
-                liquidity = float(
+                liquidity = self.safe_float(
 
-                    attr
-                    .get(
-                        "reserve_in_usd",
-                        0
+                    attributes.get(
+                        "reserve_in_usd"
                     )
 
                 )
 
 
 
-                volume = float(
+                volume = self.safe_float(
 
-                    attr
+                    attributes
                     .get(
                         "volume_usd",
                         0
@@ -149,10 +134,10 @@ class MarketScanner:
 
 
 
-                if not pool_address:
-
-                    continue
-
+                price_change = attributes.get(
+                    "price_change_percentage",
+                    {}
+                )
 
 
 
@@ -160,24 +145,30 @@ class MarketScanner:
 
                     {
 
+
                     "name":
-                    name,
+                        name,
 
 
                     "network":
-                    network,
+                        network,
 
 
                     "pool":
-                    pool_address,
+                        address,
 
 
                     "liquidity":
-                    liquidity,
+                        liquidity,
 
 
                     "volume":
-                    volume
+                        volume,
+
+
+                    "price_change":
+                        price_change
+
 
                     }
 
@@ -185,8 +176,24 @@ class MarketScanner:
 
 
 
-            return pools
 
+            # Сначала самые ликвидные
+
+            pools.sort(
+
+                key=lambda x:
+                (
+                    x["liquidity"],
+                    x["volume"]
+                ),
+
+                reverse=True
+
+            )
+
+
+
+            return pools[:limit]
 
 
 
@@ -200,3 +207,28 @@ class MarketScanner:
 
 
             return []
+
+
+
+
+
+    # =====================================
+    # Безопасное преобразование чисел
+    # =====================================
+
+
+    def safe_float(
+            self,
+            value
+    ):
+
+
+        try:
+
+            return float(value or 0)
+
+
+        except:
+
+
+            return 0
