@@ -1,31 +1,58 @@
-import json
 import os
+import json
 
 from datetime import datetime
 
 
-# DEBUG ПРОВЕРКА IMPORT
-import core.indicators
-
+# =====================================
+# DEBUG IMPORT CHECK
+# =====================================
 
 print("======================")
-print("INDICATORS DEBUG")
+print("INDICATORS CHECK")
 print("======================")
 
-print(
-    "Indicators file:",
-    core.indicators.__file__
-)
 
-print(
-    "volume_confirmation exists:",
-    hasattr(
-        core.indicators,
-        "volume_confirmation"
+try:
+
+    import core.indicators as indicators
+
+
+    print(
+        "Indicators loaded:"
     )
-)
+
+
+    print(
+        indicators.__file__
+    )
+
+
+    print(
+        "volume_confirmation:",
+        hasattr(
+            indicators,
+            "volume_confirmation"
+        )
+    )
+
+
+except Exception as e:
+
+
+    print(
+        "Indicators import error:",
+        e
+    )
+
+
+    raise
+
+
 
 print("======================")
+
+
 
 
 
@@ -42,6 +69,8 @@ from notifications.telegram import TelegramBot
 
 
 
+
+
 telegram = TelegramBot()
 
 
@@ -49,7 +78,7 @@ telegram = TelegramBot()
 
 
 # =====================================
-# Загрузка истории
+# LOAD HISTORY
 # =====================================
 
 
@@ -75,10 +104,10 @@ def load_history():
 
             encoding="utf-8"
 
-        ) as file:
+        ) as f:
 
 
-            return json.load(file)
+            return json.load(f)
 
 
 
@@ -86,7 +115,7 @@ def load_history():
 
 
         print(
-            "History load error:",
+            "History read error:",
             e
         )
 
@@ -100,7 +129,7 @@ def load_history():
 
 
 # =====================================
-# Сохранение истории
+# SAVE HISTORY
 # =====================================
 
 
@@ -133,15 +162,14 @@ def save_history(history):
 
         encoding="utf-8"
 
-    ) as file:
-
+    ) as f:
 
 
         json.dump(
 
             history,
 
-            file,
+            f,
 
             indent=4,
 
@@ -156,7 +184,7 @@ def save_history(history):
 
 
 # =====================================
-# Проверка дублей
+# CHECK DUPLICATE
 # =====================================
 
 
@@ -167,7 +195,6 @@ def is_new_signal(
 
 
     for old in history:
-
 
 
         if (
@@ -204,7 +231,7 @@ def is_new_signal(
 
 
 # =====================================
-# Добавление истории
+# ADD HISTORY
 # =====================================
 
 
@@ -226,13 +253,10 @@ def add_history(
     )
 
 
-
     history.append(
         item
     )
 
-
-    # максимум 500 сигналов
 
     return history[-500:]
 
@@ -242,9 +266,8 @@ def add_history(
 
 
 
-
 # =====================================
-# Основной запуск
+# MAIN
 # =====================================
 
 
@@ -255,7 +278,9 @@ def main():
 
     print("======================")
 
-    print(" SFP MSS BOT START ")
+    print(
+        " SFP MSS BOT START "
+    )
 
     print("======================")
 
@@ -270,7 +295,7 @@ def main():
         print()
 
         print(
-            "Scanning:",
+            "Scanning",
             timeframe
         )
 
@@ -299,6 +324,7 @@ def main():
 
 
 
+
         if not signals:
 
 
@@ -318,7 +344,7 @@ def main():
 
 
             print(
-                "Signal found:",
+                "FOUND:",
                 signal
             )
 
@@ -331,13 +357,6 @@ def main():
                 history
 
             ):
-
-
-
-                print(
-                    "NEW SIGNAL"
-                )
-
 
 
                 try:
@@ -372,9 +391,8 @@ def main():
 
 
                 print(
-                    "Duplicate skipped"
+                    "Duplicate signal"
                 )
-
 
 
 
@@ -383,7 +401,6 @@ def main():
     save_history(
         history
     )
-
 
 
     print()
