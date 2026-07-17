@@ -1,7 +1,10 @@
 # ============================================================
 # core/scanner.py
-# SFP MSS Scanner + TOP100 + Quality Filters + HTF
-# Optimized Version
+# SFP MSS Scanner
+# TOP100
+# HTF Filter
+# Quality Filter
+# Score Ranking
 # ============================================================
 
 
@@ -33,103 +36,67 @@ from config import (
 
 
 
-
-
-# ============================================================
-# SETTINGS
-# ============================================================
-
-DEBUG = False
-
-
-
-
-
-# ============================================================
-# CLIENT
-# ============================================================
-
 okx = OKXClient()
 
 
 
-
-
 # ============================================================
-# HTF CACHE
-# НЕ СБРАСЫВАЕМ МЕЖДУ СКАНАМИ
+# HTF TREND
 # ============================================================
 
-htf_cache = {}
-
-
-
-
-
-# ============================================================
-# DEBUG PRINT
-# ============================================================
-
-def debug(*args):
-
-    if DEBUG:
-
-        print(*args)
-
-
-
-
-
-# ============================================================
-# GET HTF TREND
-# ============================================================
 
 def get_higher_trend(symbol):
 
 
-    if symbol in htf_cache:
-
-        return htf_cache[symbol]
+    try:
 
 
+        candles = okx.get_ohlcv(
 
-    candles = okx.get_ohlcv(
+            symbol,
 
-        symbol,
+            HTF_TIMEFRAME,
 
-        HTF_TIMEFRAME,
+            CANDLE_LIMIT
 
-        CANDLE_LIMIT
-
-    )
-
+        )
 
 
-    if candles is None:
+        if candles is None:
+
+            return None
+
+
+
+        if len(candles) < 100:
+
+            return None
+
+
+
+        return ema200_trend(
+
+            candles
+
+        )
+
+
+
+    except Exception as e:
+
+
+        print(
+
+            "HTF error",
+
+            symbol,
+
+            e
+
+        )
+
 
         return None
-
-
-
-    if len(candles) < 200:
-
-        return None
-
-
-
-    trend = ema200_trend(
-
-        candles
-
-    )
-
-
-
-    htf_cache[symbol] = trend
-
-
-
-    return trend
 
 
 
@@ -140,6 +107,7 @@ def get_higher_trend(symbol):
 # ============================================================
 # SCAN MARKET
 # ============================================================
+
 
 def scan_market(timeframe):
 
@@ -156,16 +124,21 @@ def scan_market(timeframe):
 
 
 
-    symbols = okx.get_top_symbols()
+    try:
+
+
+        symbols = okx.get_top_symbols()
 
 
 
-    if not symbols:
+    except Exception as e:
 
 
         print(
 
-            "No symbols loaded"
+            "Symbol loading error",
+
+            e
 
         )
 
@@ -175,9 +148,19 @@ def scan_market(timeframe):
 
 
 
+
+    if not symbols:
+
+
+        return []
+
+
+
+
+
     print(
 
-        "Loaded symbols:",
+        "Symbols:",
 
         len(symbols)
 
@@ -190,75 +173,166 @@ def scan_market(timeframe):
     for symbol in symbols:
 
 
-
-        debug(
-
-            "Checking",
-
-            symbol
-
-        )
+        try:
 
 
 
+            candles = okx.get_ohlcv(
 
-        candles = okx.get_ohlcv(
+                symbol,
 
-            symbol,
+                timeframe,
 
-            timeframe,
-
-            CANDLE_LIMIT
-
-        )
-
-
-
-        if candles is None:
-
-            continue
-
-
-
-        if len(candles) < 200:
-
-            continue
-
-
-
-
-
-
-        # =====================================================
-        # HTF FILTER
-        # =====================================================
-
-
-        higher_trend = None
-
-
-
-        if (
-
-            USE_HTF_FILTER
-
-            and
-
-            timeframe != HTF_TIMEFRAME
-
-        ):
-
-
-            higher_trend = get_higher_trend(
-
-                symbol
+                CANDLE_LIMIT
 
             )
 
 
-            debug(
 
-                "HTF:",
+            if candles is None:
+
+                continue
+
+
+
+            if len(candles) < 100:
+
+                continue
+
+
+
+
+
+
+            # ==========================
+            # HTF
+            # ==========================
+
+
+            higher_trend = None
+
+
+
+            if (
+
+                USE_HTF_FILTER
+
+                and
+
+                timeframe != HTF_TIMEFRAME
+
+            ):
+
+
+                higher_trend = get_higher_trend(
+
+                    symbol
+
+                )
+
+
+
+
+
+
+            # ==========================
+            # CONDITIONS
+            # ==========================
+
+
+            vol = volume_confirmation(
+
+                candles
+
+            )
+
+
+
+            bull_sfp = bullish_sfp(
+
+                candles
+
+            )
+
+
+            bear_sfp = bearish_sfp(
+
+                candles
+
+            )
+
+
+
+            bull_mss = bullish_mss(
+
+                candles
+
+            )
+
+
+            bear_mss = bearish_mss(
+
+                candles
+
+            )
+
+
+
+
+            direction = None
+
+
+
+
+
+            if bull_sfp and bull_mss:
+
+
+                direction = "LONG"
+
+
+
+            elif bear_sfp and bear_mss:
+
+
+                direction = "SHORT"
+
+
+
+            elif bull_mss and vol:
+
+
+                direction = "LONG"
+
+
+
+            elif bear_mss and vol:
+
+
+                direction = "SHORT"
+
+
+
+
+            if direction is None:
+
+                continue
+
+
+
+
+
+
+            # ==========================
+            # FILTER
+            # ==========================
+
+
+            passed, filter_score = quality_check(
+
+                candles,
+
+                direction,
 
                 higher_trend
 
@@ -266,244 +340,87 @@ def scan_market(timeframe):
 
 
 
+            if not passed:
 
+                continue
 
 
-        # =====================================================
-        # INDICATORS
-        # =====================================================
 
 
-        volume_ok = volume_confirmation(
 
-            candles
 
-        )
 
+            # ==========================
+            # FINAL SCORE
+            # ==========================
 
 
-        long_sfp = bullish_sfp(
+            base_score = signal_score(
 
-            candles
+                candles,
 
-        )
-
-
-        short_sfp = bearish_sfp(
-
-            candles
-
-        )
-
-
-
-        long_mss = bullish_mss(
-
-            candles
-
-        )
-
-
-        short_mss = bearish_mss(
-
-            candles
-
-        )
-
-
-
-
-        debug(
-
-            "Volume:",
-
-            volume_ok
-
-        )
-
-
-        debug(
-
-            "LONG:",
-
-            long_sfp,
-
-            long_mss
-
-        )
-
-
-        debug(
-
-            "SHORT:",
-
-            short_sfp,
-
-            short_mss
-
-        )
-
-
-
-
-
-
-        direction = None
-
-
-
-
-
-
-        # =====================================================
-        # ENTRY LOGIC
-        # =====================================================
-
-
-        if long_sfp and long_mss:
-
-
-            direction = "LONG"
-
-
-
-        elif short_sfp and short_mss:
-
-
-            direction = "SHORT"
-
-
-
-
-        elif long_mss and volume_ok:
-
-
-            direction = "LONG"
-
-
-
-        elif short_mss and volume_ok:
-
-
-            direction = "SHORT"
-
-
-
-
-
-        if direction is None:
-
-            continue
-
-
-
-
-
-
-        # =====================================================
-        # QUALITY FILTER
-        # =====================================================
-
-
-        passed, filter_score = quality_check(
-
-            candles,
-
-            direction,
-
-            higher_trend
-
-        )
-
-
-
-        debug(
-
-            "Filter score:",
-
-            filter_score
-
-        )
-
-
-
-        if not passed:
-
-
-            debug(
-
-                "Rejected by filters"
+                direction
 
             )
 
 
-            continue
 
-
-
-
-
-
-
-        # =====================================================
-        # FINAL SCORE
-        # =====================================================
-
-
-        base_score = signal_score(
-
-            candles,
-
-            direction
-
-        )
-
-
-
-        final_score = round(
-
-            (
+            final_score = round(
 
                 base_score * 0.6
 
-            )
-
-            +
-
-            (
+                +
 
                 filter_score * 0.4
 
             )
 
-        )
 
 
 
+            if final_score < MIN_SIGNAL_SCORE:
 
-        debug(
-
-            "Base score:",
-
-            base_score
-
-        )
-
-
-        debug(
-
-            "Final score:",
-
-            final_score
-
-        )
+                continue
 
 
 
 
 
 
-        if final_score < MIN_SIGNAL_SCORE:
+            signals.append(
+
+                create_signal(
+
+                    symbol,
+
+                    candles,
+
+                    direction,
+
+                    final_score,
+
+                    timeframe
+
+                )
+
+            )
+
+
+
+
+        except Exception as e:
+
+
+            print(
+
+                "Scan error",
+
+                symbol,
+
+                e
+
+            )
+
 
             continue
 
@@ -511,28 +428,28 @@ def scan_market(timeframe):
 
 
 
+    # лучшие сверху
 
-        signals.append(
 
-            create_signal(
+    signals.sort(
 
-                symbol,
+        key=lambda x:
 
-                candles,
+        x["confidence"],
 
-                direction,
+        reverse=True
 
-                final_score,
-
-                timeframe
-
-            )
-
-        )
+    )
 
 
 
+    print(
 
+        "Signals found:",
+
+        len(signals)
+
+    )
 
 
 
@@ -547,6 +464,7 @@ def scan_market(timeframe):
 # ============================================================
 # CREATE SIGNAL
 # ============================================================
+
 
 def create_signal(
 
@@ -563,13 +481,11 @@ def create_signal(
 ):
 
 
-
     entry = float(
 
         df.iloc[-1]["close"]
 
     )
-
 
 
 
@@ -588,31 +504,15 @@ def create_signal(
         )
 
 
-
-        target = (
-
-            entry
-
-            +
-
-            (
-
-                entry - stop
-
-            )
-
-            *
-
-            2
-
-        )
+        risk = entry - stop
 
 
+
+        target = entry + risk * 2
 
 
 
     else:
-
 
 
         stop = float(
@@ -626,24 +526,12 @@ def create_signal(
         )
 
 
+        risk = stop - entry
 
-        target = (
 
-            entry
 
-            -
+        target = entry - risk * 2
 
-            (
-
-                stop - entry
-
-            )
-
-            *
-
-            2
-
-        )
 
 
 
@@ -653,40 +541,66 @@ def create_signal(
     return {
 
 
-        "pair": symbol,
+        "pair":
+
+            symbol,
 
 
-        "exchange": "OKX",
+
+        "exchange":
+
+            "OKX",
 
 
-        "timeframe": timeframe,
+
+        "timeframe":
+
+            timeframe,
 
 
-        "direction": direction,
+
+        "direction":
+
+            direction,
 
 
-        "confidence": round(score),
+
+        "confidence":
+
+            int(score),
 
 
-        "entry": round(entry,8),
+
+        "entry":
+
+            round(entry,8),
 
 
-        "stop": round(stop,8),
+
+        "stop":
+
+            round(stop,8),
 
 
-        "target": round(target,8),
+
+        "target":
+
+            round(target,8),
 
 
-        "volume": round(
 
-            float(
+        "volume":
 
-                df.iloc[-1]["volume"]
+            round(
 
-            ),
+                float(
 
-            2
+                    df.iloc[-1]["volume"]
 
-        )
+                ),
+
+                2
+
+            )
 
     }
