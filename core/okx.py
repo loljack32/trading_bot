@@ -146,14 +146,10 @@ class OKXClient:
 
                 # пропускаем неактивные
 
-                if item.get(
-                    "state"
-                ):
+                state = item.get("state", "live")
 
-                    if item["state"] != "live":
-
-                        continue
-
+if state != "live":
+    continue
 
 
 
