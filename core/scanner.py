@@ -16,28 +16,22 @@ from config import (
 )
 
 
-
 okx = OKXClient()
 
 
 
-
-
 # =====================================
-# Сканирование рынка
+# MARKET SCANNER
 # =====================================
-
 
 def scan_market(timeframe):
-
 
     signals = []
 
 
     print(
-        f"Scanning {timeframe}"
+        f"\nScanning {timeframe}"
     )
-
 
 
     for symbol in SYMBOLS:
@@ -49,39 +43,21 @@ def scan_market(timeframe):
         )
 
 
-
         candles = okx.get_ohlcv(
-
             symbol,
-
             timeframe,
-
             CANDLE_LIMIT
-
         )
 
 
-
         if candles is None:
-
-            print(
-                "No candles"
-            )
-
             continue
-
 
 
 
         if len(candles) < 100:
 
-            print(
-                "Not enough candles:",
-                len(candles)
-            )
-
             continue
-
 
 
 
@@ -91,11 +67,9 @@ def scan_market(timeframe):
         )
 
 
-
         long_sfp = bullish_sfp(
             candles
         )
-
 
         short_sfp = bearish_sfp(
             candles
@@ -106,12 +80,9 @@ def scan_market(timeframe):
             candles
         )
 
-
         short_mss = bearish_mss(
             candles
         )
-
-
 
 
 
@@ -123,22 +94,16 @@ def scan_market(timeframe):
 
         print(
             "LONG:",
-            "SFP",
             long_sfp,
-            "MSS",
             long_mss
         )
 
 
         print(
             "SHORT:",
-            "SFP",
             short_sfp,
-            "MSS",
             short_mss
         )
-
-
 
 
 
@@ -146,72 +111,58 @@ def scan_market(timeframe):
 
 
 
-
-
-        # =============================
+        # =========================
         # LONG
-        # =============================
+        # =========================
 
-
-        if (
-
-            long_sfp
-
-            and
-
-            long_mss
-
-        ):
-
+        if long_sfp and long_mss:
 
             direction = "LONG"
 
 
 
-
-
-        # =============================
+        # =========================
         # SHORT
-        # =============================
+        # =========================
 
-
-        elif (
-
-            short_sfp
-
-            and
-
-            short_mss
-
-        ):
-
+        elif short_sfp and short_mss:
 
             direction = "SHORT"
 
 
 
 
+        # если нет полного сетапа
+        # но есть MSS + объём
+        # даём шанс через score
+
+        elif long_mss and volume_ok:
+
+            direction = "LONG"
+
+
+
+        elif short_mss and volume_ok:
+
+            direction = "SHORT"
+
+
 
         if direction is None:
-
 
             continue
 
 
 
 
-
         score = signal_score(
-
             candles,
-
             direction
-
         )
 
 
         print(
-            "Signal score:",
+            "Score:",
             score
         )
 
@@ -219,13 +170,7 @@ def scan_market(timeframe):
 
         if score < MIN_SIGNAL_SCORE:
 
-
-            print(
-                "Score too low"
-            )
-
             continue
-
 
 
 
@@ -233,15 +178,10 @@ def scan_market(timeframe):
         signals.append(
 
             create_signal(
-
                 symbol,
-
                 candles,
-
                 direction,
-
                 score
-
             )
 
         )
@@ -256,30 +196,21 @@ def scan_market(timeframe):
 
 
 # =====================================
-# Создание сигнала
+# CREATE SIGNAL
 # =====================================
 
 
 def create_signal(
-
         symbol,
-
         df,
-
         direction,
-
         score
-
 ):
 
 
     entry = float(
-
         df.iloc[-1]["close"]
-
     )
-
-
 
 
 
@@ -289,9 +220,7 @@ def create_signal(
         stop = float(
 
             df["low"]
-
             .tail(10)
-
             .min()
 
         )
@@ -303,11 +232,7 @@ def create_signal(
 
             +
 
-            (
-
-                entry - stop
-
-            )
+            (entry - stop)
 
             *
 
@@ -317,16 +242,13 @@ def create_signal(
 
 
 
-
     else:
 
 
         stop = float(
 
             df["high"]
-
             .tail(10)
-
             .max()
 
         )
@@ -338,11 +260,7 @@ def create_signal(
 
             -
 
-            (
-
-                stop - entry
-
-            )
+            (stop - entry)
 
             *
 
@@ -353,57 +271,38 @@ def create_signal(
 
 
 
-
-
     return {
 
 
         "pair":
-
             symbol,
 
 
         "exchange":
-
             "OKX",
 
 
         "direction":
-
             direction,
 
 
         "confidence":
-
             score,
 
 
         "entry":
-
-            round(
-                entry,
-                8
-            ),
+            round(entry,8),
 
 
         "stop":
-
-            round(
-                stop,
-                8
-            ),
+            round(stop,8),
 
 
         "target":
-
-            round(
-                target,
-                8
-            ),
+            round(target,8),
 
 
         "volume":
-
             round(
                 float(
                     df.iloc[-1]["volume"]
