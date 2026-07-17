@@ -1,0 +1,85 @@
+name: SFP MSS Trading Bot
+
+
+on:
+
+  # автоматический запуск каждые 5 минут
+
+  schedule:
+
+    - cron: "*/5 * * * *"
+
+
+
+  # ручной запуск из GitHub
+
+  workflow_dispatch:
+
+
+
+
+jobs:
+
+
+  scan-market:
+
+
+    runs-on: ubuntu-latest
+
+
+
+    steps:
+
+
+      # Получаем код
+
+      - name: Checkout repository
+
+        uses: actions/checkout@v4
+
+
+
+
+      # Устанавливаем Python
+
+      - name: Setup Python
+
+        uses: actions/setup-python@v5
+
+        with:
+
+          python-version: "3.11"
+
+
+
+
+      # Установка библиотек
+
+      - name: Install dependencies
+
+        run: |
+
+          pip install -r requirements.txt
+
+
+
+
+
+      # Запуск бота
+
+      - name: Run SFP MSS Bot
+
+        env:
+
+
+          TELEGRAM_TOKEN:
+            ${{ secrets.TELEGRAM_TOKEN }}
+
+
+          CHAT_ID:
+            ${{ secrets.CHAT_ID }}
+
+
+        run:
+
+          python main.py
