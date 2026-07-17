@@ -72,19 +72,7 @@ from notifications.telegram import TelegramBot
 # =====================================
 
 
-telegram_config = {
-
-    "token": TELEGRAM_TOKEN,
-
-    "chat_id": TELEGRAM_CHAT_ID
-
-}
-
-
-telegram = TelegramBot(
-    telegram_config
-)
-
+telegram = TelegramBot()
 
 
 
