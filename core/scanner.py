@@ -1,6 +1,6 @@
 # ============================================================
 # core/scanner.py
-# SFP MSS Scanner with Quality Filters + HTF Trend
+# SFP MSS Scanner + TOP100 + Quality Filters + HTF
 # ============================================================
 
 
@@ -24,14 +24,23 @@ from core.filters import (
 
 
 from config import (
-    SYMBOLS,
     CANDLE_LIMIT,
-    MIN_SIGNAL_SCORE
+    MIN_SIGNAL_SCORE,
+    HTF_TIMEFRAME,
+    USE_HTF_FILTER
 )
 
 
 
+
+
 okx = OKXClient()
+
+
+
+# кэш старшего тренда
+
+htf_cache = {}
 
 
 
@@ -41,18 +50,26 @@ okx = OKXClient()
 # GET HTF TREND
 # ============================================================
 
+
 def get_higher_trend(symbol):
+
+
+    if symbol in htf_cache:
+
+        return htf_cache[symbol]
+
 
 
     candles = okx.get_ohlcv(
 
         symbol,
 
-        "4H",
+        HTF_TIMEFRAME,
 
         CANDLE_LIMIT
 
     )
+
 
 
     if candles is None:
@@ -67,17 +84,28 @@ def get_higher_trend(symbol):
 
 
 
-    return ema200_trend(
+    trend = ema200_trend(
+
         candles
+
     )
 
 
 
+    htf_cache[symbol] = trend
+
+
+
+    return trend
+
+
+
 
 
 # ============================================================
-# MARKET SCANNER
+# SCAN MARKET
 # ============================================================
+
 
 def scan_market(timeframe):
 
@@ -85,20 +113,68 @@ def scan_market(timeframe):
     signals = []
 
 
+
+    global htf_cache
+
+    htf_cache = {}
+
+
+
     print(
+
         f"\nScanning {timeframe}"
+
     )
 
 
 
-    for symbol in SYMBOLS:
+
+    symbols = okx.get_top_symbols()
+
+
+
+    if not symbols:
+
+
+        print(
+
+            "No symbols loaded"
+
+        )
+
+
+        return []
+
+
+
+
+
+    print(
+
+        "Analysing symbols:",
+
+        len(symbols)
+
+    )
+
+
+
+
+
+
+    for symbol in symbols:
 
 
 
         print(
+
             "\nChecking",
+
             symbol
+
         )
+
+
 
 
 
@@ -128,60 +204,86 @@ def scan_market(timeframe):
 
 
 
-        # =================================
+
+        # =================================================
         # HTF FILTER
-        # =================================
+        # =================================================
 
 
         higher_trend = None
 
 
 
-        if timeframe != "4H":
+        if (
+
+            USE_HTF_FILTER
+
+            and
+
+            timeframe != HTF_TIMEFRAME
+
+        ):
+
 
             higher_trend = get_higher_trend(
-                symbol
-            )
 
+                symbol
+
+            )
 
 
             print(
-                "HTF trend:",
+
+                "HTF:",
+
                 higher_trend
+
             )
 
 
 
 
 
-        # =================================
-        # BASIC CONDITIONS
-        # =================================
+
+        # =================================================
+        # CONDITIONS
+        # =================================================
 
 
         volume_ok = volume_confirmation(
+
             candles
+
         )
 
 
 
         long_sfp = bullish_sfp(
+
             candles
+
         )
 
 
         short_sfp = bearish_sfp(
+
             candles
+
         )
 
 
+
         long_mss = bullish_mss(
+
             candles
+
         )
 
 
         short_mss = bearish_mss(
+
             candles
+
         )
 
 
@@ -189,23 +291,36 @@ def scan_market(timeframe):
 
 
         print(
+
             "Volume:",
+
             volume_ok
+
         )
 
 
         print(
+
             "LONG:",
+
             long_sfp,
+
             long_mss
+
         )
 
 
         print(
+
             "SHORT:",
+
             short_sfp,
+
             short_mss
+
         )
+
+
 
 
 
@@ -216,12 +331,14 @@ def scan_market(timeframe):
 
 
 
-        # =================================
-        # SETUP
-        # =================================
+
+        # =================================================
+        # ENTRY LOGIC
+        # =================================================
 
 
         if long_sfp and long_mss:
+
 
             direction = "LONG"
 
@@ -229,14 +346,14 @@ def scan_market(timeframe):
 
         elif short_sfp and short_mss:
 
+
             direction = "SHORT"
 
 
 
 
-        # MSS + volume fallback
-
         elif long_mss and volume_ok:
+
 
             direction = "LONG"
 
@@ -244,7 +361,9 @@ def scan_market(timeframe):
 
         elif short_mss and volume_ok:
 
+
             direction = "SHORT"
+
 
 
 
@@ -257,9 +376,10 @@ def scan_market(timeframe):
 
 
 
-        # =================================
-        # QUALITY FILTERS
-        # =================================
+
+        # =================================================
+        # QUALITY FILTER
+        # =================================================
 
 
         passed, filter_score = quality_check(
@@ -275,8 +395,11 @@ def scan_market(timeframe):
 
 
         print(
+
             "Filter score:",
+
             filter_score
+
         )
 
 
@@ -285,7 +408,9 @@ def scan_market(timeframe):
 
 
             print(
-                "Rejected by quality filter"
+
+                "Rejected by filters"
+
             )
 
 
@@ -295,9 +420,10 @@ def scan_market(timeframe):
 
 
 
-        # =================================
+
+        # =================================================
         # FINAL SCORE
-        # =================================
+        # =================================================
 
 
         base_score = signal_score(
@@ -322,9 +448,13 @@ def scan_market(timeframe):
 
 
 
+
         print(
+
             "Final score:",
+
             final_score
+
         )
 
 
@@ -359,6 +489,7 @@ def scan_market(timeframe):
 
 
 
+
     return signals
 
 
@@ -371,11 +502,17 @@ def scan_market(timeframe):
 # CREATE SIGNAL
 # ============================================================
 
+
 def create_signal(
+
         symbol,
+
         df,
+
         direction,
+
         score
+
 ):
 
 
@@ -390,6 +527,7 @@ def create_signal(
 
 
     if direction == "LONG":
+
 
 
         stop = float(
@@ -417,6 +555,7 @@ def create_signal(
             2
 
         )
+
 
 
 
@@ -456,44 +595,54 @@ def create_signal(
 
 
 
+
+
     return {
 
 
         "pair":
+
             symbol,
 
 
         "exchange":
+
             "OKX",
 
 
 
         "direction":
+
             direction,
 
 
 
         "confidence":
+
             round(score),
 
 
 
         "entry":
+
             round(entry,8),
 
 
 
         "stop":
+
             round(stop,8),
 
 
 
         "target":
+
             round(target,8),
 
 
 
         "volume":
+
             round(
 
                 float(
