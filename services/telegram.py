@@ -36,7 +36,6 @@ class TelegramBot:
 <b>Pair:</b> {signal.get('pair')}
 <b>Direction:</b> {signal.get('direction')}
 <b>Confidence:</b> {signal.get('confidence')}%
-<b>Setup:</b> {signal.get('setup')}
 <b>Entry:</b> {signal.get('entry')}
 <b>Stop:</b> {signal.get('stop')}
 <b>Target:</b> {signal.get('target')}

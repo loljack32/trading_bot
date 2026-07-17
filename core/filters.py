@@ -1,290 +1,82 @@
-# ============================================================
-# core/filters.py
-# Advanced Quality Filters
-# ============================================================
+from __future__ import annotations
 
-import pandas as pd
+from typing import Any
 
-from config import (
-    EMA_PERIOD,
-    RSI_PERIOD,
-    ATR_PERIOD
-)
+from config import ATR_PERIOD, EMA_PERIOD, RSI_PERIOD
+from core.indicators import calculate_atr, calculate_candle_strength, calculate_rsi, calculate_volume_ratio, prepare_dataframe
+from core.models import SignalMetrics
 
 
+def ema200_trend(df) -> str:
+    prepared = prepare_dataframe(df)
+    ema = prepared["close"].ewm(span=EMA_PERIOD, adjust=False).mean()
+    price = float(prepared["close"].iloc[-1])
+    ema_value = float(ema.iloc[-1])
+    return "LONG" if price > ema_value else "SHORT"
 
-# ============================================================
-# EMA TREND
-# ============================================================
 
-def ema200_trend(df):
+def evaluate_filters(df, direction: str, htf_trend: str | None = None) -> SignalMetrics:
+    prepared = prepare_dataframe(df)
+    metrics = SignalMetrics()
+    reasons: list[str] = []
 
-
-    ema = (
-        df["close"]
-        .ewm(
-            span=EMA_PERIOD,
-            adjust=False
-        )
-        .mean()
-    )
-
-
-    price = df["close"].iloc[-1]
-
-
-    if price >= ema.iloc[-1]:
-
-        return "LONG"
-
-
-    return "SHORT"
-
-
-
-
-
-# ============================================================
-# RSI
-# ============================================================
-
-def calculate_rsi(df):
-
-
-    delta = df["close"].diff()
-
-
-    gain = (
-        delta
-        .clip(lower=0)
-        .rolling(RSI_PERIOD)
-        .mean()
-    )
-
-
-    loss = (
-        -delta
-        .clip(upper=0)
-        .rolling(RSI_PERIOD)
-        .mean()
-    )
-
-
-    rs = gain / loss
-
-
-    rsi = 100 - (
-        100 /
-        (1 + rs)
-    )
-
-
-    value = rsi.iloc[-1]
-
-
-    if pd.isna(value):
-
-        return 50
-
-
-    return float(value)
-
-
-
-
-
-# ============================================================
-# ATR
-# ============================================================
-
-def calculate_atr(df):
-
-
-    high_low = (
-        df["high"]
-        -
-        df["low"]
-    )
-
-
-    high_close = abs(
-        df["high"]
-        -
-        df["close"].shift()
-    )
-
-
-    low_close = abs(
-        df["low"]
-        -
-        df["close"].shift()
-    )
-
-
-    tr = pd.concat(
-        [
-            high_low,
-            high_close,
-            low_close
-        ],
-        axis=1
-    ).max(axis=1)
-
-
-    atr = (
-        tr
-        .rolling(ATR_PERIOD)
-        .mean()
-        .iloc[-1]
-    )
-
-
-    if pd.isna(atr):
-
-        return 0
-
-
-    return float(atr)
-
-
-
-
-
-# ============================================================
-# RSI FILTER
-# ============================================================
-
-def rsi_check(df, direction):
-
-
-    rsi = calculate_rsi(df)
-
-
-
-    if direction == "LONG":
-
-        return (
-            30 <= rsi <= 75
-        )
-
-
-
-    if direction == "SHORT":
-
-        return (
-            25 <= rsi <= 70
-        )
-
-
-    return False
-
-
-
-
-
-
-# ============================================================
-# ATR FILTER
-# ============================================================
-
-def atr_check(df):
-
-
-    atr = calculate_atr(df)
-
-
-    price = float(
-        df["close"].iloc[-1]
-    )
-
-
-    if price == 0:
-
-        return False
-
-
-
-    volatility = atr / price
-
-
-    return volatility >= 0.0015
-
-
-
-
-
-# ============================================================
-# QUALITY CHECK
-# ============================================================
-
-def quality_check(
-        df,
-        direction,
-        higher_trend=None
-):
-
-
-    score = 0
-
-
-
-    # EMA
-
-    trend = ema200_trend(df)
-
-
-
+    trend = ema200_trend(prepared)
     if trend == direction:
+        metrics.trend_passed = True
+        metrics.reasons.append("EMA200 aligned")
+    else:
+        metrics.reasons.append("EMA200 against trend")
 
-        score += 30
+    rsi = calculate_rsi(prepared, RSI_PERIOD)
+    if direction == "LONG" and 35 <= rsi <= 70:
+        metrics.reasons.append("RSI in range")
+    elif direction == "SHORT" and 30 <= rsi <= 65:
+        metrics.reasons.append("RSI in range")
+    else:
+        metrics.reasons.append("RSI extreme")
 
+    atr = calculate_atr(prepared, ATR_PERIOD)
+    price = float(prepared["close"].iloc[-1])
+    atr_ratio = atr / max(price, 1e-9)
+    if atr_ratio >= 0.0015:
+        metrics.atr_passed = True
+        metrics.reasons.append("ATR adequate")
+    else:
+        metrics.reasons.append("ATR too low")
 
+    volume_ratio = calculate_volume_ratio(prepared, period=20)
+    if volume_ratio >= 1.2:
+        metrics.volume_passed = True
+        metrics.reasons.append("Volume expansion")
+    else:
+        metrics.reasons.append("Volume weak")
 
-    # RSI
+    candle_strength = calculate_candle_strength(prepared)
+    if candle_strength >= 0.75:
+        metrics.candle_strength_passed = True
+        metrics.reasons.append("Strong candle")
+    else:
+        metrics.reasons.append("Weak candle")
 
-    if rsi_check(
-        df,
-        direction
-    ):
-
-        score += 20
-
-
-
-
-    # ATR
-
-    if atr_check(df):
-
-        score += 20
-
-
-
-
-    # HTF
-
-    if higher_trend:
-
-
-        if higher_trend == direction:
-
-            score += 30
-
-
+    if htf_trend is not None:
+        if htf_trend == direction:
+            metrics.htf_passed = True
+            metrics.reasons.append("HTF aligned")
         else:
+            metrics.reasons.append("HTF against")
 
-            score += 0
+    if metrics.trend_passed or metrics.atr_passed or metrics.volume_passed or metrics.candle_strength_passed:
+        metrics.reasons.append("Core filters pass")
+    if metrics.htf_passed is False and htf_trend is not None:
+        metrics.reasons.append("HTF filter failed")
 
-
-
-
-    if score > 100:
-
-        score = 100
-
-
-
-    return (
-        score >= 50,
-        score
+    metrics.score = sum(
+        [
+            20 if metrics.trend_passed else 0,
+            10 if metrics.atr_passed else 0,
+            10 if metrics.volume_passed else 0,
+            5 if metrics.candle_strength_passed else 0,
+            20 if metrics.htf_passed else 0,
+        ]
     )
+    return metrics
