@@ -1,4 +1,5 @@
 from core.gecko import GeckoTerminal
+from core.market import MarketScanner
 
 from core.indicators import (
     bullish_sfp,
@@ -11,70 +12,35 @@ from core.indicators import (
 from config import MIN_LIQUIDITY
 
 
-
 gecko = GeckoTerminal()
+market = MarketScanner()
 
 
 
 # =====================================
-# Список монет для сканирования
+# Основной сканер рынка
 # =====================================
-
-# Пока тестовый список.
-# Позже сделаем автоматический поиск
-# всех пулов через GeckoTerminal.
-
-
-WATCHLIST = [
-
-    {
-        "name": "TEST",
-        "network": "solana",
-        "pool": "POOL_ADDRESS"
-    }
-
-]
-
-
-
-
-
-# =====================================
-# Основной сканер
-# =====================================
-
 
 def scan_market(timeframe):
-
 
     signals = []
 
 
+    # Получаем топовые пулы автоматически
 
-    for coin in WATCHLIST:
+    pools = market.get_top_pools(
+        "solana",
+        100
+    )
 
 
+    for coin in pools:
 
-        pool_data = gecko.get_pool_data(
 
-            coin["network"],
-
-            coin["pool"]
-
+        liquidity = coin.get(
+            "liquidity",
+            0
         )
-
-
-
-        if not pool_data:
-
-            continue
-
-
-
-        liquidity = (
-            pool_data["liquidity"]
-        )
-
 
 
         # фильтр ликвидности
@@ -82,7 +48,6 @@ def scan_market(timeframe):
         if liquidity < MIN_LIQUIDITY:
 
             continue
-
 
 
 
@@ -110,12 +75,8 @@ def scan_market(timeframe):
 
 
 
-
-
-        volume_ok = (
-            volume_confirmation(
-                candles
-            )
+        volume_ok = volume_confirmation(
+            candles
         )
 
 
@@ -127,9 +88,8 @@ def scan_market(timeframe):
 
 
 
-
         # ==========================
-        # LONG
+        # LONG SIGNAL
         # ==========================
 
 
@@ -165,7 +125,7 @@ def scan_market(timeframe):
 
 
         # ==========================
-        # SHORT
+        # SHORT SIGNAL
         # ==========================
 
 
@@ -198,7 +158,6 @@ def scan_market(timeframe):
 
 
 
-
     return signals
 
 
@@ -223,7 +182,7 @@ def create_signal(
 ):
 
 
-    price = (
+    price = float(
         df.iloc[-1]["close"]
     )
 
@@ -232,7 +191,7 @@ def create_signal(
     if direction == "LONG":
 
 
-        stop = (
+        stop = float(
             df["low"]
             .tail(10)
             .min()
@@ -240,9 +199,10 @@ def create_signal(
 
 
         target = (
-            price +
+            price
+            +
             (
-                price-stop
+                price - stop
             )
             *
             2
@@ -253,7 +213,7 @@ def create_signal(
     else:
 
 
-        stop = (
+        stop = float(
             df["high"]
             .tail(10)
             .max()
@@ -261,9 +221,10 @@ def create_signal(
 
 
         target = (
-            price -
+            price
+            -
             (
-                stop-price
+                stop - price
             )
             *
             2
@@ -271,17 +232,26 @@ def create_signal(
 
 
 
-
-
     return {
 
 
         "pair":
-            coin["name"],
+            coin.get(
+                "name",
+                "UNKNOWN"
+            ),
 
 
         "network":
-            coin["network"],
+            coin.get(
+                "network"
+            ),
+
+
+        "pool":
+            coin.get(
+                "pool"
+            ),
 
 
         "direction":
@@ -312,6 +282,16 @@ def create_signal(
         "liquidity":
             round(
                 liquidity,
+                2
+            ),
+
+
+        "volume":
+            round(
+                coin.get(
+                    "volume",
+                    0
+                ),
                 2
             )
 
