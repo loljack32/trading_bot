@@ -25,7 +25,11 @@ export default {
 
       const allowedChatId = env.ALLOWED_CHAT_ID || '';
       if (allowedChatId && String(chatId) !== String(allowedChatId)) {
-        await sendTelegramMessage(env.BOT_TOKEN, chatId, 'Access denied');
+        if (env.BOT_TOKEN) {
+          await sendTelegramMessage(env.BOT_TOKEN, chatId, 'Access denied');
+        } else {
+          console.warn('Access denied, but BOT_TOKEN is missing; no message sent');
+        }
         return new Response('ok', { status: 200 });
       }
 
@@ -54,11 +58,21 @@ export default {
       }
 
       if (state) {
-        await writePositionStateToGithub(env, state);
+        try {
+          await writePositionStateToGithub(env, state);
+        } catch (writeError) {
+          console.error('Failed to save state to GitHub:', writeError);
+          responseText += '\n⚠️ Не удалось сохранить состояние: ' + String(writeError.message);
+        }
       }
 
       if (env.BOT_TOKEN) {
-        await sendTelegramMessage(env.BOT_TOKEN, chatId, responseText);
+        try {
+          await sendTelegramMessage(env.BOT_TOKEN, chatId, responseText);
+        } catch (sendError) {
+          console.error('Failed to send Telegram message:', sendError);
+          responseText += '\n⚠️ Не удалось отправить ответ в Telegram: ' + String(sendError.message);
+        }
       }
 
       return new Response('ok', { status: 200 });
@@ -79,7 +93,8 @@ async function writePositionStateToGithub(env, state) {
   const path = env.GITHUB_FILE_PATH || 'data/position_state.json';
 
   if (!owner || !repo || !token) {
-    throw new Error('Missing GitHub env vars');
+    console.warn('GitHub env vars missing, skipping state save');
+    return;
   }
 
   const current = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
@@ -87,6 +102,7 @@ async function writePositionStateToGithub(env, state) {
       'Accept': 'application/vnd.github+json',
       'Authorization': `Bearer ${token}`,
       'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'Cloudflare-Worker',
     },
   });
 
@@ -128,6 +144,7 @@ async function writePositionStateToGithub(env, state) {
       'Authorization': `Bearer ${token}`,
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
+      'User-Agent': 'Cloudflare-Worker',
     },
     body: JSON.stringify(body),
   });
@@ -140,10 +157,10 @@ async function writePositionStateToGithub(env, state) {
 
 async function sendTelegramMessage(botToken, chatId, text) {
   if (!botToken) {
-    return;
+    throw new Error('BOT_TOKEN is missing');
   }
 
-  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -152,6 +169,11 @@ async function sendTelegramMessage(botToken, chatId, text) {
       parse_mode: 'HTML',
     }),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Telegram send failed: ${response.status} ${errorText}`);
+  }
 }
 
 function toBase64(str) {
