@@ -7,7 +7,8 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("CHAT_ID", "")
+# Support both TELEGRAM_CHAT_ID (preferred) and legacy CHAT_ID env var
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", os.getenv("CHAT_ID", ""))
 
 TIMEFRAMES = ["15m", "1H", "4H"]
 HTF_TIMEFRAME = "4H"
