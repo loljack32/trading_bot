@@ -33,7 +33,7 @@ class TelegramBot:
             return False
 
     def send_signal(self, signal: dict[str, object]) -> bool:
-        state = load_position_state(config.BALANCE_FILE if hasattr(config, "BALANCE_FILE") else "data/position_state.json")
+        state = load_position_state(config.POSITION_STATE_FILE if hasattr(config, "POSITION_STATE_FILE") else "data/position_state.json")
         metrics = calculate_position_from_state(state)
         message = f"""
 <b>⚡ SFP MSS SIGNAL</b>
@@ -59,15 +59,14 @@ class TelegramBot:
             return False
 
         if text.startswith("/balance") or text.startswith("/procent"):
-            path = getattr(config, "BALANCE_FILE", "data/position_state.json")
-            state_path = path.replace(".json", "_state.json") if path.endswith(".json") else f"{path}_state.json"
+            path = getattr(config, "POSITION_STATE_FILE", "data/position_state.json")
             if text.startswith("/balance"):
-                state = update_position_state_from_command(text, state_path)
+                state = update_position_state_from_command(text, path)
                 self.send(f"Balance saved: ${state.get('balance_usd')}", chat_id)
                 return True
 
             if text.startswith("/procent"):
-                state = update_position_state_from_command(text, state_path)
+                state = update_position_state_from_command(text, path)
                 self.send(f"Risk saved: {state.get('risk_pct')}%", chat_id)
                 return True
 
@@ -75,10 +74,9 @@ class TelegramBot:
         return False
 
     def sync_worker_state(self) -> dict[str, object]:
-        path = getattr(config, "BALANCE_FILE", "data/position_state.json")
-        state_path = path.replace(".json", "_state.json") if path.endswith(".json") else f"{path}_state.json"
-        state = load_position_state(state_path)
-        save_position_state(state, "data/position_state.json")
+        path = getattr(config, "POSITION_STATE_FILE", "data/position_state.json")
+        state = load_position_state(path)
+        save_position_state(state, path)
         return state
 
     def poll_messages(self, limit: int = 10) -> int:

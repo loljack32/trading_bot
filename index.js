@@ -42,7 +42,7 @@ export default {
         if (!Number.isFinite(amount) || amount <= 0) {
           responseText = 'Usage: /balance <amount_usd>';
         } else {
-          state = { balance_usd: amount, risk_pct: null, last_updated: new Date().toISOString() };
+          state = { balance_usd: amount, last_updated: new Date().toISOString() };
           responseText = `✅ Balance saved: $${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
         }
       } else if (command === '/procent' || command === '/risk') {
@@ -50,7 +50,7 @@ export default {
         if (!Number.isFinite(pct) || pct <= 0) {
           responseText = 'Usage: /procent <risk_pct>';
         } else {
-          state = { balance_usd: null, risk_pct: pct, last_updated: new Date().toISOString() };
+          state = { risk_pct: pct, last_updated: new Date().toISOString() };
           responseText = `✅ Risk saved: ${pct}%`;
         }
       } else {
@@ -123,8 +123,16 @@ async function writePositionStateToGithub(env, state) {
     }
   }
 
-  const mergedState = { ...existingState, ...state, last_updated: state.last_updated };
-  const contentText = JSON.stringify(mergedState, null, 2);
+  // Merge defensively: don't overwrite existing values with null/undefined
+  const finalState = Object.assign({}, existingState);
+  for (const key of Object.keys(state)) {
+    const val = state[key];
+    if (val !== null && val !== undefined) {
+      finalState[key] = val;
+    }
+  }
+  finalState.last_updated = new Date().toISOString();
+  const contentText = JSON.stringify(finalState, null, 2);
   const contentBase64 = toBase64(contentText);
 
   const body = {
