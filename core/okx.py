@@ -23,7 +23,7 @@ class OKXClient:
 
 
     # =====================================
-    # Получение свечей OKX
+    # OHLCV
     # =====================================
 
 
@@ -47,25 +47,22 @@ class OKXClient:
         )
 
 
-
         params = {
 
 
             "instId":
-
                 symbol,
 
 
             "bar":
-
                 timeframe,
 
 
             "limit":
-
                 limit
 
         }
+
 
 
 
@@ -93,18 +90,14 @@ class OKXClient:
 
 
                     print(
-
                         "OKX HTTP ERROR:",
-
                         response.status_code
-
                     )
 
 
-                    time.sleep(3)
+                    time.sleep(2)
 
                     continue
-
 
 
 
@@ -117,11 +110,8 @@ class OKXClient:
 
 
                     print(
-
                         "OKX API ERROR:",
-
                         data
-
                     )
 
 
@@ -130,13 +120,9 @@ class OKXClient:
 
 
 
-
                 candles = data.get(
-
                     "data",
-
                     []
-
                 )
 
 
@@ -148,6 +134,7 @@ class OKXClient:
 
 
 
+
                 rows = []
 
 
@@ -155,22 +142,21 @@ class OKXClient:
                 for candle in candles:
 
 
-
                     rows.append(
 
                         [
 
-                            candle[0], # timestamp
+                            candle[0],
 
-                            candle[1], # open
+                            candle[1],
 
-                            candle[2], # high
+                            candle[2],
 
-                            candle[3], # low
+                            candle[3],
 
-                            candle[4], # close
+                            candle[4],
 
-                            candle[5]  # volume
+                            candle[5]
 
                         ]
 
@@ -206,7 +192,7 @@ class OKXClient:
 
 
 
-                for col in [
+                numeric = [
 
                     "open",
 
@@ -218,7 +204,11 @@ class OKXClient:
 
                     "volume"
 
-                ]:
+                ]
+
+
+
+                for col in numeric:
 
 
                     df[col] = pd.to_numeric(
@@ -232,6 +222,22 @@ class OKXClient:
 
 
 
+
+
+                df["timestamp"] = pd.to_datetime(
+
+                    df["timestamp"],
+
+                    unit="ms"
+
+                )
+
+
+
+
+
+
+                # старая -> новая
 
                 df = df.sort_values(
 
@@ -249,6 +255,19 @@ class OKXClient:
 
 
 
+
+
+
+                # убираем текущую незакрытую свечу
+
+                if len(df) > 1:
+
+                    df = df.iloc[:-1]
+
+
+
+
+
                 return df
 
 
@@ -256,7 +275,6 @@ class OKXClient:
 
 
             except Exception as e:
-
 
 
                 print(
@@ -268,8 +286,7 @@ class OKXClient:
                 )
 
 
-
-                time.sleep(3)
+                time.sleep(2)
 
 
 
@@ -283,7 +300,7 @@ class OKXClient:
 
 
     # =====================================
-    # Проверка инструмента
+    # Ticker
     # =====================================
 
 
@@ -308,7 +325,6 @@ class OKXClient:
 
 
             "instId":
-
                 symbol
 
         }
@@ -337,7 +353,6 @@ class OKXClient:
             if data.get("code") != "0":
 
                 return None
-
 
 
 
