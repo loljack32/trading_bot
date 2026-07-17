@@ -3,17 +3,13 @@ name: SFP MSS Trading Bot
 
 on:
 
-  # автоматический запуск каждые 5 минут
-
   schedule:
 
     - cron: "*/5 * * * *"
 
 
-
-  # ручной запуск из GitHub
-
   workflow_dispatch:
+
 
 
 
@@ -31,7 +27,8 @@ jobs:
     steps:
 
 
-      # Получаем код
+
+      # Получение кода
 
       - name: Checkout repository
 
@@ -40,7 +37,8 @@ jobs:
 
 
 
-      # Устанавливаем Python
+
+      # Python
 
       - name: Setup Python
 
@@ -53,13 +51,56 @@ jobs:
 
 
 
+
       # Установка библиотек
 
       - name: Install dependencies
 
         run: |
 
+          python -m pip install --upgrade pip
+
           pip install -r requirements.txt
+
+
+
+
+
+      # Очистка старого кэша Python
+
+      - name: Clear Python cache
+
+        run: |
+
+          find . -name "__pycache__" -type d -exec rm -rf {} +
+
+
+
+
+
+      # Диагностика файлов
+
+      - name: Debug repository
+
+        run: |
+
+          echo "========== TREE =========="
+
+          find . -maxdepth 3 -type f
+
+
+          echo ""
+
+          echo "========== INDICATORS FILES =========="
+
+          find . -name "indicators.py"
+
+
+          echo ""
+
+          echo "========== VOLUME FUNCTION =========="
+
+          grep -R "def volume_confirmation" .
 
 
 
@@ -71,13 +112,9 @@ jobs:
 
         env:
 
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
 
-          TELEGRAM_TOKEN:
-            ${{ secrets.TELEGRAM_TOKEN }}
-
-
-          CHAT_ID:
-            ${{ secrets.CHAT_ID }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
 
 
         run:
