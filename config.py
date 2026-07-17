@@ -37,6 +37,9 @@ MIN_ATR_RATIO = 0.0015
 MIN_CANDLE_STRENGTH = 0.75
 
 HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
+BALANCE_FILE = os.path.join(DATA_DIR, "balance_requests.json")
+POSITION_STATE_FILE = os.path.join(DATA_DIR, "position_state.json")
+WORKER_URL = os.getenv("WORKER_URL", "")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 
