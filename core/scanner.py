@@ -1,6 +1,7 @@
 # ============================================================
 # core/scanner.py
 # SFP MSS Scanner + TOP100 + Quality Filters + HTF
+# Optimized Version
 # ============================================================
 
 
@@ -34,13 +35,46 @@ from config import (
 
 
 
+# ============================================================
+# SETTINGS
+# ============================================================
+
+DEBUG = False
+
+
+
+
+
+# ============================================================
+# CLIENT
+# ============================================================
+
 okx = OKXClient()
 
 
 
-# кэш старшего тренда
+
+
+# ============================================================
+# HTF CACHE
+# НЕ СБРАСЫВАЕМ МЕЖДУ СКАНАМИ
+# ============================================================
 
 htf_cache = {}
+
+
+
+
+
+# ============================================================
+# DEBUG PRINT
+# ============================================================
+
+def debug(*args):
+
+    if DEBUG:
+
+        print(*args)
 
 
 
@@ -101,6 +135,8 @@ def get_higher_trend(symbol):
 
 
 
+
+
 # ============================================================
 # SCAN MARKET
 # ============================================================
@@ -112,18 +148,11 @@ def scan_market(timeframe):
 
 
 
-    global htf_cache
-
-    htf_cache = {}
-
-
-
     print(
 
-        f"\nScanning {timeframe}"
+        f"Scanning {timeframe}"
 
     )
-
 
 
 
@@ -146,10 +175,9 @@ def scan_market(timeframe):
 
 
 
-
     print(
 
-        "Analysing symbols:",
+        "Loaded symbols:",
 
         len(symbols)
 
@@ -159,19 +187,17 @@ def scan_market(timeframe):
 
 
 
-
     for symbol in symbols:
 
 
 
-        print(
+        debug(
 
-            "\nChecking",
+            "Checking",
 
             symbol
 
         )
-
 
 
 
@@ -203,9 +229,9 @@ def scan_market(timeframe):
 
 
 
-        # =================================================
+        # =====================================================
         # HTF FILTER
-        # =================================================
+        # =====================================================
 
 
         higher_trend = None
@@ -230,7 +256,7 @@ def scan_market(timeframe):
             )
 
 
-            print(
+            debug(
 
                 "HTF:",
 
@@ -243,9 +269,9 @@ def scan_market(timeframe):
 
 
 
-        # =================================================
-        # CONDITIONS
-        # =================================================
+        # =====================================================
+        # INDICATORS
+        # =====================================================
 
 
         volume_ok = volume_confirmation(
@@ -287,8 +313,7 @@ def scan_market(timeframe):
 
 
 
-
-        print(
+        debug(
 
             "Volume:",
 
@@ -297,7 +322,7 @@ def scan_market(timeframe):
         )
 
 
-        print(
+        debug(
 
             "LONG:",
 
@@ -308,7 +333,7 @@ def scan_market(timeframe):
         )
 
 
-        print(
+        debug(
 
             "SHORT:",
 
@@ -330,9 +355,9 @@ def scan_market(timeframe):
 
 
 
-        # =================================================
+        # =====================================================
         # ENTRY LOGIC
-        # =================================================
+        # =====================================================
 
 
         if long_sfp and long_mss:
@@ -375,9 +400,9 @@ def scan_market(timeframe):
 
 
 
-        # =================================================
+        # =====================================================
         # QUALITY FILTER
-        # =================================================
+        # =====================================================
 
 
         passed, filter_score = quality_check(
@@ -392,7 +417,7 @@ def scan_market(timeframe):
 
 
 
-        print(
+        debug(
 
             "Filter score:",
 
@@ -405,7 +430,7 @@ def scan_market(timeframe):
         if not passed:
 
 
-            print(
+            debug(
 
                 "Rejected by filters"
 
@@ -419,9 +444,10 @@ def scan_market(timeframe):
 
 
 
-        # =================================================
-        # FINAL SCORE 0-100
-        # =================================================
+
+        # =====================================================
+        # FINAL SCORE
+        # =====================================================
 
 
         base_score = signal_score(
@@ -436,18 +462,26 @@ def scan_market(timeframe):
 
         final_score = round(
 
-            (base_score * 0.6)
+            (
+
+                base_score * 0.6
+
+            )
 
             +
 
-            (filter_score * 0.4)
+            (
+
+                filter_score * 0.4
+
+            )
 
         )
 
 
 
 
-        print(
+        debug(
 
             "Base score:",
 
@@ -456,7 +490,7 @@ def scan_market(timeframe):
         )
 
 
-        print(
+        debug(
 
             "Final score:",
 
@@ -468,9 +502,11 @@ def scan_market(timeframe):
 
 
 
+
         if final_score < MIN_SIGNAL_SCORE:
 
             continue
+
 
 
 
@@ -493,6 +529,7 @@ def scan_market(timeframe):
             )
 
         )
+
 
 
 
@@ -526,6 +563,7 @@ def create_signal(
 ):
 
 
+
     entry = float(
 
         df.iloc[-1]["close"]
@@ -537,7 +575,6 @@ def create_signal(
 
 
     if direction == "LONG":
-
 
 
         stop = float(
@@ -558,14 +595,17 @@ def create_signal(
 
             +
 
-            (entry - stop)
+            (
+
+                entry - stop
+
+            )
 
             *
 
             2
 
         )
-
 
 
 
@@ -593,7 +633,11 @@ def create_signal(
 
             -
 
-            (stop - entry)
+            (
+
+                stop - entry
+
+            )
 
             *
 
@@ -606,68 +650,43 @@ def create_signal(
 
 
 
-
     return {
 
 
-        "pair":
-
-            symbol,
+        "pair": symbol,
 
 
-        "exchange":
-
-            "OKX",
+        "exchange": "OKX",
 
 
-        "timeframe":
-
-            timeframe,
+        "timeframe": timeframe,
 
 
-
-        "direction":
-
-            direction,
+        "direction": direction,
 
 
-
-        "confidence":
-
-            round(score),
+        "confidence": round(score),
 
 
-
-        "entry":
-
-            round(entry,8),
+        "entry": round(entry,8),
 
 
-
-        "stop":
-
-            round(stop,8),
+        "stop": round(stop,8),
 
 
-
-        "target":
-
-            round(target,8),
+        "target": round(target,8),
 
 
+        "volume": round(
 
-        "volume":
+            float(
 
-            round(
+                df.iloc[-1]["volume"]
 
-                float(
+            ),
 
-                    df.iloc[-1]["volume"]
+            2
 
-                ),
-
-                2
-
-            )
+        )
 
     }
