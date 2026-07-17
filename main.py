@@ -1,13 +1,42 @@
 import json
 import os
+
 from datetime import datetime
+
+
+# DEBUG ПРОВЕРКА IMPORT
+import core.indicators
+
+
+print("======================")
+print("INDICATORS DEBUG")
+print("======================")
+
+print(
+    "Indicators file:",
+    core.indicators.__file__
+)
+
+print(
+    "volume_confirmation exists:",
+    hasattr(
+        core.indicators,
+        "volume_confirmation"
+    )
+)
+
+print("======================")
+
+
 
 from config import (
     TIMEFRAMES,
     HISTORY_FILE
 )
 
+
 from core.scanner import scan_market
+
 
 from notifications.telegram import TelegramBot
 
@@ -17,12 +46,15 @@ telegram = TelegramBot()
 
 
 
+
+
 # =====================================
-# Работа с историей сигналов
+# Загрузка истории
 # =====================================
 
 
 def load_history():
+
 
     if not os.path.exists(
         HISTORY_FILE
@@ -31,19 +63,32 @@ def load_history():
         return []
 
 
+
     try:
 
+
         with open(
+
             HISTORY_FILE,
+
             "r",
+
             encoding="utf-8"
+
         ) as file:
+
 
             return json.load(file)
 
 
 
-    except Exception:
+    except Exception as e:
+
+
+        print(
+            "History load error:",
+            e
+        )
 
 
         return []
@@ -52,18 +97,32 @@ def load_history():
 
 
 
+
+
+# =====================================
+# Сохранение истории
+# =====================================
+
+
 def save_history(history):
 
 
-    os.makedirs(
-
-        os.path.dirname(
-            HISTORY_FILE
-        ),
-
-        exist_ok=True
-
+    folder = os.path.dirname(
+        HISTORY_FILE
     )
+
+
+    if folder:
+
+
+        os.makedirs(
+
+            folder,
+
+            exist_ok=True
+
+        )
+
 
 
     with open(
@@ -75,6 +134,7 @@ def save_history(history):
         encoding="utf-8"
 
     ) as file:
+
 
 
         json.dump(
@@ -93,8 +153,10 @@ def save_history(history):
 
 
 
+
+
 # =====================================
-# Проверка дубликатов
+# Проверка дублей
 # =====================================
 
 
@@ -107,20 +169,24 @@ def is_new_signal(
     for old in history:
 
 
+
         if (
 
-            old["pair"] ==
-            signal["pair"]
+            old.get("pair")
+            ==
+            signal.get("pair")
 
             and
 
-            old["direction"] ==
-            signal["direction"]
+            old.get("direction")
+            ==
+            signal.get("direction")
 
             and
 
-            old["entry"] ==
-            signal["entry"]
+            old.get("entry")
+            ==
+            signal.get("entry")
 
         ):
 
@@ -130,6 +196,8 @@ def is_new_signal(
 
 
     return True
+
+
 
 
 
@@ -146,30 +214,30 @@ def add_history(
 ):
 
 
-    signal_copy = signal.copy()
+    item = signal.copy()
 
 
-    signal_copy["time"] = (
+    item["time"] = (
 
         datetime.utcnow()
+
         .isoformat()
 
     )
 
 
+
     history.append(
-        signal_copy
+        item
     )
 
 
+    # максимум 500 сигналов
 
-    # храним последние 500
-
-    history = history[-500:]
-
+    return history[-500:]
 
 
-    return history
+
 
 
 
@@ -183,18 +251,13 @@ def add_history(
 def main():
 
 
-    print(
-        "======================"
-    )
+    print()
 
-    print(
-        " SFP + MSS BOT START "
-    )
+    print("======================")
 
-    print(
-        "======================"
-    )
+    print(" SFP MSS BOT START ")
 
+    print("======================")
 
 
     history = load_history()
@@ -204,18 +267,35 @@ def main():
     for timeframe in TIMEFRAMES:
 
 
+        print()
 
         print(
-
-            f"Scanning {timeframe}"
-
-        )
-
-
-
-        signals = scan_market(
+            "Scanning:",
             timeframe
         )
+
+
+
+        try:
+
+
+            signals = scan_market(
+                timeframe
+            )
+
+
+
+        except Exception as e:
+
+
+            print(
+                "Scanner error:",
+                e
+            )
+
+
+            continue
+
 
 
 
@@ -232,7 +312,15 @@ def main():
 
 
 
+
         for signal in signals:
+
+
+
+            print(
+                "Signal found:",
+                signal
+            )
 
 
 
@@ -245,16 +333,28 @@ def main():
             ):
 
 
+
                 print(
-                    "NEW SIGNAL:",
-                    signal
+                    "NEW SIGNAL"
                 )
 
 
 
-                telegram.send_signal(
-                    signal
-                )
+                try:
+
+
+                    telegram.send_signal(
+                        signal
+                    )
+
+
+                except Exception as e:
+
+
+                    print(
+                        "Telegram error:",
+                        e
+                    )
 
 
 
@@ -272,8 +372,10 @@ def main():
 
 
                 print(
-                    "Duplicate signal skipped"
+                    "Duplicate skipped"
                 )
+
+
 
 
 
@@ -284,9 +386,13 @@ def main():
 
 
 
+    print()
+
     print(
         "SCAN COMPLETE"
     )
+
+
 
 
 
