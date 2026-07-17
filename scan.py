@@ -77,46 +77,39 @@ def scan():
         volume_usd = item['volume_usd']
         
         try:
-            print(f"🔄 [{i}/{len(top_symbols)}] Проверяю {symbol:<15} ...", end=" ")
-            
             # --- ПРОВЕРКА 1H (Базовая) ---
             candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             if len(candles_1h) < 10:
-                print("недостаточно данных")
                 continue
                 
             closes = [c[4] for c in candles_1h]
             highs = [c[2] for c in candles_1h]
             lows = [c[3] for c in candles_1h]
             
-            # ВАЖНО: [-10:-1] исключает текущую формирующуюся свечу из расчета максимума/минимума
+            # Исключаем текущую формирующуюся свечу [-1] из расчета исторических экстремумов
             recent_high = max(highs[-10:-1])
             recent_low = min(lows[-10:-1])
             
             last_high = highs[-1]
             last_low = lows[-1]
             last_close = closes[-1]
-            prev_close = closes[-2]
             
-            # 🐞 ОТЛАДКА: показываем, что бот сравнивает (можно удалить потом, если надоест)
-            print(f"🐞 DEBUG | {symbol}")
-            print(f"    Прошлый макс (10 свечей без текущей): {recent_high}")
-            print(f"    Прошлый мин (10 свечей без текущей): {recent_low}")
-            print(f"    Текущая свеча: high={last_high}, low={last_low}, close={last_close}")
-            print(f"    Предыдущая свеча close: {prev_close}")
-            print(f"    Пробой вверх? {last_high} > {recent_high} = {last_high > recent_high}")
-            print(f"    Пробой вниз? {last_low} < {recent_low} = {last_low < recent_low}")
+            # === ИСПРАВЛЕННАЯ ЛОГИКА SFP + НАСТОЯЩИЙ MSS ===
+            # Для SHORT: Цена пробила максимум (SFP), закрылась ниже него, И пробила локальный минимум последних 3 свечей (MSS)
+            recent_min_for_mss = min(lows[-4:-1]) 
+            is_short_sfp = (last_high > recent_high) and (last_close < recent_high)
+            is_short_mss = (last_low < recent_min_for_mss)
+            is_short_sfp_mss = is_short_sfp and is_short_mss
 
-            # Условия SFP + MSS для обоих направлений
-            is_short_sfp_mss = (last_high > recent_high) and (last_close < recent_high) and (last_close < prev_close)
-            is_long_sfp_mss = (last_low < recent_low) and (last_close > recent_low) and (last_close > prev_close)
+            # Для LONG: Цена пробила минимум (SFP), закрылась выше него, И пробила локальный максимум последних 3 свечей (MSS)
+            recent_max_for_mss = max(highs[-4:-1])
+            is_long_sfp = (last_low < recent_low) and (last_close > recent_low)
+            is_long_mss = (last_high > recent_max_for_mss)
+            is_long_sfp_mss = is_long_sfp and is_long_mss
             
             if not (is_short_sfp_mss or is_long_sfp_mss):
-                print("нет SFP/MSS")
                 continue
             
-            print("SFP/MSS есть, проверяю фитиль и 4H...", end=" ")
-
             # --- ДИНАМИЧЕСКИЙ РАЗМЕР ФИТИЛЯ ---
             ranges = [h - l for h, l in zip(highs[-10:-1], lows[-10:-1])]
             avg_range = sum(ranges) / len(ranges) if ranges else 1
@@ -134,7 +127,7 @@ def scan():
                 is_bearish_4h = current_price_4h < sma_20_4h
                 
                 if is_good_wick and is_bearish_4h:
-                    print("🎯 НАЙДЕН СЕТАП НА SHORT!")
+                    print(f"🎯 [{i}/{len(top_symbols)}] НАЙДЕН СЕТАП НА SHORT: {symbol}")
                     
                     entry = last_close
                     stop = last_high * 1.005
@@ -156,7 +149,7 @@ def scan():
                         'trend': 'Медвежий (цена < SMA20)',
                         'volume_usd': volume_usd
                     })
-                    continue # Переходим к следующей монете
+                    continue # Переходим к следующей монете, чтобы не дублировать LONG/SHORT на одной паре
 
             # 2. ПРОВЕРКА НА LONG
             if is_long_sfp_mss:
@@ -165,7 +158,7 @@ def scan():
                 is_bullish_4h = current_price_4h > sma_20_4h
                 
                 if is_good_wick and is_bullish_4h:
-                    print("🎯 НАЙДЕН СЕТАП НА LONG!")
+                    print(f"🎯 [{i}/{len(top_symbols)}] НАЙДЕН СЕТАП НА LONG: {symbol}")
                     
                     entry = last_close
                     stop = last_low * 0.995
@@ -188,11 +181,8 @@ def scan():
                         'volume_usd': volume_usd
                     })
                     
-            if not any(s['symbol'] == symbol.split('/')[0] for s in found_signals):
-                print("фильтры не пройдены")
-                
         except Exception as e:
-            print(f"⚠️ Ошибка: {str(e)[:50]}")
+            # Тихий пропуск ошибок на отдельных парах, чтобы не ломать весь скан
             continue
 
     # 3. СОРТИРОВКА И ОТПРАВКА ОДНОГО СООБЩЕНИЯ
@@ -206,7 +196,7 @@ def scan():
         display_limit = 15
         signals_to_show = found_signals[:display_limit]
         
-        # ФОРМИРОВАНИЕ СООБЩЕНИЯ В MARKDOWN (без HTML тегов!)
+        # ФОРМИРОВАНИЕ СООБЩЕНИЯ В MARKDOWN
         msg = "🚨 *УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + MSS*\n\n"
         msg += "📊 Отсортировано по объему 24ч (чем выше, тем надежнее):\n"
         msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -217,12 +207,11 @@ def scan():
             
             msg += (f"{i}. *{sig['symbol']}* | {emoji} *{sig['type']}*\n"
                     f"   📍 Вход: `{sig['entry']:.2f}` | Стоп: `{sig['stop']:.2f}`\n"
-                    f"   💰 Поз: `${sig['pos_size']:.0f}` | Плечо: `{sig['leverage']}x`\n"
-                    f"   ⚠️ Риск: `${sig['risk']:.2f}` | 📊 {sig['trend']}\n"
+                    f"   💰 Поз: `<LaTex>id_1</LaTex>{sig['risk']:.2f}` | 📊 {sig['trend']}\n"
                     f"   📈 Объем 24ч: `${vol_formatted}`\n\n")
             
         if len(found_signals) > display_limit:
-            msg += f"⚠️ _Показаны топ-{display_limit} из {len(found_signals)}. Остальные отфильтрованы по меньшему объему._\n\n"
+            msg += f"⚠️ _Показаны топ-{display_limit} из {len(found_signals)}. Остальные отфильтрованы._\n\n"
             
         msg += "⚠️ _Не забывай про риск-менеджмент! Проверяй график на 15м перед входом._"
         
@@ -236,7 +225,7 @@ def scan():
             print(f"❌ Ошибка Telegram: {response.text}")
 
     else:
-        # СООБЩЕНИЕ "НЕТ СИГНАЛОВ" ТОЖЕ В MARKDOWN
+        # СООБЩЕНИЕ "НЕТ СИГНАЛОВ"
         no_signal_msg = (
             "🔍 *Сканирование завершено*\n\n"
             f"Проверено {len(top_symbols)} самых ликвидных пар на OKX.\n\n"
@@ -249,5 +238,3 @@ def scan():
                       json={'chat_id': chat_id, 'text': no_signal_msg, 'parse_mode': 'Markdown'})
 
 if __name__ == "__main__":
-    scan()
-
