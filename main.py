@@ -17,16 +17,13 @@ try:
 
     import core.indicators as indicators
 
-
     print(
         "Indicators loaded:"
     )
 
-
     print(
         indicators.__file__
     )
-
 
     print(
         "volume_confirmation:",
@@ -39,26 +36,27 @@ try:
 
 except Exception as e:
 
-
     print(
         "Indicators import error:",
         e
     )
 
-
     raise
-
 
 
 print("======================")
 
 
-
+# =====================================
+# IMPORTS
+# =====================================
 
 
 from config import (
     TIMEFRAMES,
-    HISTORY_FILE
+    HISTORY_FILE,
+    TELEGRAM_TOKEN,
+    TELEGRAM_CHAT_ID
 )
 
 
@@ -69,10 +67,23 @@ from notifications.telegram import TelegramBot
 
 
 
+# =====================================
+# TELEGRAM INIT
+# =====================================
 
 
-telegram = TelegramBot()
+telegram_config = {
 
+    "token": TELEGRAM_TOKEN,
+
+    "chat_id": TELEGRAM_CHAT_ID
+
+}
+
+
+telegram = TelegramBot(
+    telegram_config
+)
 
 
 
