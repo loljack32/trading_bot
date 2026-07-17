@@ -80,6 +80,7 @@ def scan():
             print(f"🔄 [{i}/{len(top_symbols)}] Проверяю {symbol:<15} ...", end=" ")
             
             # --- ПРОВЕРКА 1H (Базовая) ---
+                        # --- ПРОВЕРКА 1H (Базовая) ---
             candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             if len(candles_1h) < 10:
                 print("недостаточно данных")
@@ -89,13 +90,24 @@ def scan():
             highs = [c[2] for c in candles_1h]
             lows = [c[3] for c in candles_1h]
             
-            recent_high = max(highs[-10:-1]) # Исключаем текущую незакрытую свечу из поиска максимума
+            recent_high = max(highs[-10:-1])
             recent_low = min(lows[-10:-1])
             
             last_high = highs[-1]
             last_low = lows[-1]
             last_close = closes[-1]
             prev_close = closes[-2]
+            
+            # 🐞 ОТЛАДКА: показываем, что бот сравнивает
+            print(f"🐞 DEBUG | {symbol}")
+            print(f"    Прошлый макс (10 свечей без текущей): {recent_high}")
+            print(f"   🐞 Прошлый мин (10 свечей без текущей): {recent_low}")
+            print(f"   🐞 Текущая свеча: high={last_high}, low={last_low}, close={last_close}")
+            print(f"   🐞 Предыдущая свеча close: {prev_close}")
+            print(f"   🐞 Пробой вверх? {last_high} > {recent_high} = {last_high > recent_high}")
+            print(f"   🐞 Пробой вниз? {last_low} < {recent_low} = {last_low < recent_low}")
+
+
             
             # Условия SFP + MSS для обоих направлений
             is_short_sfp_mss = (last_high > recent_high) and (last_close < recent_high) and (last_close < prev_close)
