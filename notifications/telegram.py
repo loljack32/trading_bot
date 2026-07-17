@@ -5,19 +5,22 @@
 
 import requests
 
+import config
+
+
 
 class TelegramBot:
 
 
-    def __init__(self, config):
+    def __init__(self):
 
-        self.config = config
 
         self.token = getattr(
             config,
             "TELEGRAM_TOKEN",
             None
         )
+
 
         self.chat_id = getattr(
             config,
@@ -27,7 +30,9 @@ class TelegramBot:
 
 
 
-    # --------------------------------------------------------
+    # ========================================================
+    # Отправка сообщения
+    # ========================================================
 
     def send(self, message):
 
@@ -56,6 +61,7 @@ class TelegramBot:
             f"https://api.telegram.org/"
             f"bot{self.token}/sendMessage"
         )
+
 
 
         payload = {
@@ -109,7 +115,7 @@ class TelegramBot:
 
 
             print(
-                "Telegram timeout"
+                "Telegram error: timeout"
             )
 
             return False
@@ -120,7 +126,7 @@ class TelegramBot:
 
 
             print(
-                "Telegram network error"
+                "Telegram error: network"
             )
 
             return False
@@ -139,35 +145,38 @@ class TelegramBot:
 
 
 
-    # --------------------------------------------------------
+
+    # ========================================================
+    # Сигнал
+    # ========================================================
 
     def send_signal(self, signal):
 
 
-        text = f"""
+        message = f"""
 
-<b>SFP MSS SIGNAL</b>
-
-
-Pair: {signal['pair']}
-
-Direction: {signal['direction']}
-
-Confidence: {signal['confidence']}%
+<b>⚡ SFP MSS SIGNAL</b>
 
 
-Entry: {signal['entry']}
+<b>Pair:</b> {signal['pair']}
 
-Stop: {signal['stop']}
+<b>Direction:</b> {signal['direction']}
 
-Target: {signal['target']}
+<b>Confidence:</b> {signal['confidence']}%
 
 
-Volume: {signal['volume']}
+<b>Entry:</b> {signal['entry']}
+
+<b>Stop:</b> {signal['stop']}
+
+<b>Target:</b> {signal['target']}
+
+
+<b>Volume:</b> {signal['volume']}
 
 """
 
 
         return self.send(
-            text.strip()
+            message.strip()
         )
