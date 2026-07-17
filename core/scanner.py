@@ -10,6 +10,8 @@ from core.indicators import (
 )
 
 from config import (
+    SYMBOLS,
+    CANDLE_LIMIT,
     MIN_SIGNAL_SCORE
 )
 
@@ -19,37 +21,10 @@ okx = OKXClient()
 
 
 
-# =====================================
-# Список инструментов OKX
-# =====================================
-
-WATCHLIST = [
-
-    "BTC-USDT",
-
-    "ETH-USDT",
-
-    "SOL-USDT",
-
-    "XRP-USDT",
-
-    "DOGE-USDT",
-
-    "AVAX-USDT",
-
-    "LINK-USDT",
-
-    "ADA-USDT",
-
-    "DOT-USDT"
-
-]
-
-
 
 
 # =====================================
-# Сканирование рынка
+# Сканирование рынка OKX
 # =====================================
 
 
@@ -60,7 +35,23 @@ def scan_market(timeframe):
 
 
 
-    for symbol in WATCHLIST:
+    print(
+        f"Scanning {timeframe}"
+    )
+
+
+
+    for symbol in SYMBOLS:
+
+
+
+        print(
+
+            "Checking",
+
+            symbol
+
+        )
 
 
 
@@ -70,7 +61,7 @@ def scan_market(timeframe):
 
             timeframe,
 
-            200
+            CANDLE_LIMIT
 
         )
 
@@ -96,12 +87,16 @@ def scan_market(timeframe):
 
 
 
+
         direction = None
 
 
 
 
+        # =============================
         # LONG
+        # =============================
+
 
         if (
 
@@ -113,12 +108,18 @@ def scan_market(timeframe):
 
         ):
 
+
             direction = "LONG"
 
 
 
 
+
+
+        # =============================
         # SHORT
+        # =============================
+
 
         elif (
 
@@ -130,7 +131,9 @@ def scan_market(timeframe):
 
         ):
 
+
             direction = "SHORT"
+
 
 
 
@@ -139,6 +142,7 @@ def scan_market(timeframe):
         if direction is None:
 
             continue
+
 
 
 
@@ -153,6 +157,8 @@ def scan_market(timeframe):
 
 
 
+
+
         if score < MIN_SIGNAL_SCORE:
 
             continue
@@ -160,19 +166,24 @@ def scan_market(timeframe):
 
 
 
+
+        signal = create_signal(
+
+            symbol,
+
+            candles,
+
+            direction,
+
+            score
+
+        )
+
+
+
         signals.append(
 
-            create_signal(
-
-                symbol,
-
-                candles,
-
-                direction,
-
-                score
-
-            )
+            signal
 
         )
 
@@ -186,7 +197,7 @@ def scan_market(timeframe):
 
 
 # =====================================
-# Создание сигнала
+# Формирование сигнала
 # =====================================
 
 
@@ -217,7 +228,9 @@ def create_signal(
         stop = float(
 
             df["low"]
+
             .tail(10)
+
             .min()
 
         )
@@ -247,10 +260,13 @@ def create_signal(
     else:
 
 
+
         stop = float(
 
             df["high"]
+
             .tail(10)
+
             .max()
 
         )
@@ -287,7 +303,8 @@ def create_signal(
             symbol,
 
 
-        "network":
+
+        "exchange":
 
             "OKX",
 
@@ -341,17 +358,15 @@ def create_signal(
 
 
 
-        "liquidity":
-
-            "N/A",
-
-
-
         "volume":
 
             round(
 
-                df.iloc[-1]["volume"],
+                float(
+
+                    df.iloc[-1]["volume"]
+
+                ),
 
                 2
 
