@@ -1,6 +1,7 @@
 # ============================================================
 # core/okx.py
 # OKX API CLIENT
+# TOP100 SWAP VOLUME + VALIDATION
 # ============================================================
 
 
@@ -67,7 +68,6 @@ class OKXClient:
 
 
 
-
         try:
 
 
@@ -124,13 +124,35 @@ class OKXClient:
 
 
 
-                # только USDT пары
+                if not symbol:
+
+                    continue
+
+
+
+
+                # только USDT perpetual
 
                 if not symbol.endswith(
+
                     f"-{QUOTE_CURRENCY}-SWAP"
+
                 ):
 
                     continue
+
+
+
+
+                # пропускаем неактивные
+
+                if item.get(
+                    "state"
+                ):
+
+                    if item["state"] != "live":
+
+                        continue
 
 
 
@@ -150,6 +172,14 @@ class OKXClient:
 
 
 
+                if volume <= 0:
+
+                    continue
+
+
+
+
+
                 markets.append(
 
                     (
@@ -166,11 +196,9 @@ class OKXClient:
 
 
 
-            # сортировка по объёму
-
             markets.sort(
 
-                key=lambda x: x[1],
+                key=lambda x:x[1],
 
                 reverse=True
 
@@ -180,31 +208,17 @@ class OKXClient:
 
 
 
-            symbols = []
+            symbols = [
 
+                x[0]
 
+                for x in markets[
 
-            for symbol, volume in markets[
+                    :TOP_SYMBOLS_LIMIT
 
-                :TOP_SYMBOLS_LIMIT
+                ]
 
-            ]:
-
-
-                clean = symbol.replace(
-
-                    "-SWAP",
-
-                    ""
-
-                )
-
-
-                symbols.append(
-
-                    clean
-
-                )
+            ]
 
 
 
@@ -217,6 +231,7 @@ class OKXClient:
                 len(symbols)
 
             )
+
 
 
             return symbols
@@ -245,6 +260,7 @@ class OKXClient:
 
 
 
+
     # ========================================================
     # OHLCV
     # ========================================================
@@ -261,6 +277,7 @@ class OKXClient:
             limit=200
 
     ):
+
 
 
         url = (
@@ -292,11 +309,11 @@ class OKXClient:
 
 
 
-
         for attempt in range(3):
 
 
             try:
+
 
 
                 response = requests.get(
@@ -317,6 +334,7 @@ class OKXClient:
 
 
 
+
                 if data.get("code") != "0":
 
 
@@ -324,7 +342,9 @@ class OKXClient:
 
                         "OKX candle error:",
 
-                        data
+                        symbol,
+
+                        data.get("msg")
 
                     )
 
@@ -347,8 +367,8 @@ class OKXClient:
 
                 if not candles:
 
-                    return None
 
+                    return None
 
 
 
@@ -381,7 +401,6 @@ class OKXClient:
                         ]
 
                     )
-
 
 
 
@@ -431,6 +450,7 @@ class OKXClient:
 
 
 
+
                 for col in numeric:
 
 
@@ -462,7 +482,6 @@ class OKXClient:
 
 
 
-
                 df = df.sort_values(
 
                     "timestamp"
@@ -481,12 +500,12 @@ class OKXClient:
 
 
 
-                # удаляем текущую свечу
+
+                # удаляем незакрытую свечу
 
                 if len(df) > 1:
 
                     df = df.iloc[:-1]
-
 
 
 
@@ -509,6 +528,7 @@ class OKXClient:
             except Exception as e:
 
 
+
                 print(
 
                     "OHLCV error:",
@@ -518,6 +538,7 @@ class OKXClient:
                 )
 
 
+
                 time.sleep(2)
 
 
@@ -525,6 +546,7 @@ class OKXClient:
 
 
         return None
+
 
 
 
@@ -546,6 +568,7 @@ class OKXClient:
     ):
 
 
+
         url = (
 
             f"{BASE_URL}/api/v5/market/ticker"
@@ -562,7 +585,6 @@ class OKXClient:
             symbol
 
         }
-
 
 
 
