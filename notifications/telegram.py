@@ -1,158 +1,179 @@
+# ============================================================
+# core/telegram.py
+# Надежная отправка сигналов в Telegram
+# ============================================================
+
 import requests
 
 from config import (
-    TELEGRAM_TOKEN,
+    TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID
 )
 
 
 
-class TelegramBot:
+# ============================================================
+# Отправка сообщения
+# ============================================================
+
+def send_telegram(message: str):
+
+    if not TELEGRAM_BOT_TOKEN:
+        print("Telegram disabled: no token")
+        return False
 
 
-    def __init__(self):
-
-        self.token = TELEGRAM_TOKEN
-        self.chat_id = TELEGRAM_CHAT_ID
-
-
-
-    def send_message(self, text):
-
-
-        if not self.token or not self.chat_id:
-
-            print(
-                "Telegram config missing"
-            )
-
-            return False
+    if not TELEGRAM_CHAT_ID:
+        print("Telegram disabled: no chat id")
+        return False
 
 
 
-        url = (
-            f"https://api.telegram.org/"
-            f"bot{self.token}/sendMessage"
+    url = (
+        f"https://api.telegram.org/"
+        f"bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    )
+
+
+
+    payload = {
+
+        "chat_id": TELEGRAM_CHAT_ID,
+
+        "text": message,
+
+        "parse_mode": "HTML"
+
+    }
+
+
+
+    try:
+
+        response = requests.post(
+
+            url,
+
+            json=payload,
+
+            timeout=10
+
         )
 
 
 
-        payload = {
-
-            "chat_id":
-                self.chat_id,
-
-            "text":
-                text,
-
-            "parse_mode":
-                "HTML"
-
-        }
+        data = response.json()
 
 
 
-        try:
-
-            response = requests.post(
-
-                url,
-
-                json=payload,
-
-                timeout=10
-
-            )
-
-
-            return response.status_code == 200
-
-
-
-        except Exception as e:
-
+        if not data.get("ok"):
 
             print(
-                "Telegram error:",
-                e
+                "Telegram API error:",
+                data
             )
-
 
             return False
 
 
 
-
-    def send_signal(self, signal):
-
-
-        direction = signal["direction"]
+        return True
 
 
 
-        if direction == "LONG":
+    except requests.exceptions.Timeout:
 
-            emoji = "🟢"
+        print(
+            "Telegram error: timeout"
+        )
 
-        else:
-
-            emoji = "🔴"
-
-
+        return False
 
 
 
-        message = f"""
+    except requests.exceptions.ConnectionError:
 
-🔥 <b>SFP + MSS SIGNAL</b>
+        print(
+            "Telegram error: network connection"
+        )
 
-
-{emoji} <b>{direction}</b>
-
-
-<b>PAIR:</b>
-{signal['pair']}
-
-
-<b>NETWORK:</b>
-{signal['network']}
-
-
-<b>CONFIDENCE:</b>
-{signal.get('confidence', 0)}%
+        return False
 
 
 
-<b>ENTRY:</b>
-<code>{signal['entry']}</code>
+    except Exception as e:
 
+        print(
+            "Telegram error:",
+            str(e)
+        )
 
-<b>STOP LOSS:</b>
-<code>{signal['stop']}</code>
-
-
-<b>TAKE PROFIT:</b>
-<code>{signal['target']}</code>
-
-
-
-<b>LIQUIDITY:</b>
-${signal['liquidity']}
+        return False
 
 
 
-<b>VOLUME 24H:</b>
-${signal.get('volume', 0)}
+
+
+# ============================================================
+# Форматирование торгового сигнала
+# ============================================================
+
+def format_signal(signal):
+
+
+    direction_icon = (
+        "🟢"
+        if signal["direction"] == "LONG"
+        else
+        "🔴"
+    )
 
 
 
-<b>STRATEGY:</b>
-SFP + MSS
+    text = f"""
 
+{direction_icon} <b>SFP MSS SIGNAL</b>
+
+
+<b>Pair:</b> {signal['pair']}
+
+<b>Exchange:</b> {signal['exchange']}
+
+<b>Direction:</b> {signal['direction']}
+
+<b>Confidence:</b> {signal['confidence']}%
+
+
+<b>Entry:</b> {signal['entry']}
+
+<b>Stop:</b> {signal['stop']}
+
+<b>Target:</b> {signal['target']}
+
+
+<b>Volume:</b> {signal['volume']}
+
+
+⚡ Risk / Reward: 1:2
 
 """
 
+    return text.strip()
 
-        return self.send_message(
-            message
-        )
+
+
+
+
+# ============================================================
+# Отправка торгового сигнала
+# ============================================================
+
+def send_signal(signal):
+
+
+    message = format_signal(signal)
+
+
+    return send_telegram(
+        message
+    )
