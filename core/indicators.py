@@ -8,6 +8,7 @@ from config import (
 )
 
 
+
 # =====================================
 # Swing High / Swing Low
 # =====================================
@@ -16,6 +17,7 @@ def find_swings(df):
 
     highs = []
     lows = []
+
 
     for i in range(
         SWING_LOOKBACK,
@@ -30,36 +32,56 @@ def find_swings(df):
             i-SWING_LOOKBACK:i
         ]
 
+
         right = df.iloc[
             i+1:i+1+SWING_LOOKBACK
         ]
 
 
+
         if (
+
             high > left["high"].max()
+
             and
+
             high > right["high"].max()
+
         ):
 
             highs.append({
+
                 "index": i,
+
                 "price": float(high)
+
             })
+
 
 
         if (
+
             low < left["low"].min()
+
             and
+
             low < right["low"].min()
+
         ):
 
             lows.append({
+
                 "index": i,
+
                 "price": float(low)
+
             })
 
 
+
     return highs, lows
+
+
 
 
 
@@ -76,9 +98,13 @@ def calculate_atr(
 
 
     data["prev_close"] = (
+
         data["close"]
+
         .shift(1)
+
     )
+
 
 
     data["tr"] = data.apply(
@@ -87,11 +113,13 @@ def calculate_atr(
 
             x["high"] - x["low"],
 
+
             abs(
                 x["high"]
                 -
                 x["prev_close"]
             ),
+
 
             abs(
                 x["low"]
@@ -106,12 +134,20 @@ def calculate_atr(
     )
 
 
+
     return (
+
         data["tr"]
+
         .rolling(period)
+
         .mean()
+
         .iloc[-1]
+
     )
+
+
 
 
 
@@ -121,18 +157,25 @@ def calculate_atr(
 
 def volume_strength(df):
 
+
     current = df.iloc[-1]["volume"]
 
 
     average = (
+
         df["volume"]
+
         .rolling(20)
+
         .mean()
+
         .iloc[-1]
+
     )
 
 
     if average == 0:
+
         return 0
 
 
@@ -140,13 +183,22 @@ def volume_strength(df):
 
 
 
+
+
 def volume_confirmation(df):
 
+
     return (
+
         volume_strength(df)
+
         >=
+
         VOLUME_MULTIPLIER
+
     )
+
+
 
 
 
@@ -156,11 +208,14 @@ def volume_confirmation(df):
 
 def bullish_sfp(df):
 
+
     highs, lows = find_swings(df)
 
 
-    if not lows:
+    if len(lows) < 1:
+
         return False
+
 
 
     level = lows[-1]["price"]
@@ -169,42 +224,80 @@ def bullish_sfp(df):
     candle = df.iloc[-1]
 
 
-    size = (
+
+    candle_range = (
+
         candle["high"]
+
         -
+
         candle["low"]
+
     )
 
 
-    if size <= 0:
+
+    if candle_range <= 0:
+
         return False
 
 
 
-    wick = (
-        level
+    lower_wick = (
+
+        candle["close"]
+
         -
+
         candle["low"]
+
     )
 
 
-    wick_ratio = wick / size
+
+    wick_ratio = (
+
+        lower_wick
+
+        /
+
+        candle_range
+
+    )
 
 
 
     return (
 
-        candle["low"] < level
+        candle["low"]
+
+        <
+
+        level
+
 
         and
 
-        candle["close"] > level
+
+        candle["close"]
+
+        >
+
+        level
+
 
         and
 
-        wick_ratio >= MIN_WICK_PERCENT
+
+        wick_ratio
+
+        >=
+
+        0.3
 
     )
+
+
 
 
 
@@ -214,11 +307,14 @@ def bullish_sfp(df):
 
 def bearish_sfp(df):
 
+
     highs, lows = find_swings(df)
 
 
-    if not highs:
+    if len(highs) < 1:
+
         return False
+
 
 
     level = highs[-1]["price"]
@@ -227,42 +323,80 @@ def bearish_sfp(df):
     candle = df.iloc[-1]
 
 
-    size = (
+
+    candle_range = (
+
         candle["high"]
+
         -
+
         candle["low"]
+
     )
 
 
-    if size <= 0:
+
+    if candle_range <= 0:
+
         return False
 
 
 
-    wick = (
+    upper_wick = (
+
         candle["high"]
+
         -
-        level
+
+        candle["close"]
+
     )
 
 
-    wick_ratio = wick / size
+
+    wick_ratio = (
+
+        upper_wick
+
+        /
+
+        candle_range
+
+    )
 
 
 
     return (
 
-        candle["high"] > level
+        candle["high"]
+
+        >
+
+        level
+
 
         and
 
-        candle["close"] < level
+
+        candle["close"]
+
+        <
+
+        level
+
 
         and
 
-        wick_ratio >= MIN_WICK_PERCENT
+
+        wick_ratio
+
+        >=
+
+        0.3
 
     )
+
+
 
 
 
@@ -272,39 +406,53 @@ def bearish_sfp(df):
 
 def bullish_mss(df):
 
+
     highs, lows = find_swings(df)
 
 
     if len(highs) < 1:
+
         return False
 
 
-    last_high = highs[-1]["price"]
+
+    return (
+
+        df.iloc[-1]["close"]
+
+        >
+
+        highs[-1]["price"]
+
+    )
 
 
-    close = df.iloc[-1]["close"]
-
-
-    return close > last_high
 
 
 
 def bearish_mss(df):
 
+
     highs, lows = find_swings(df)
 
 
     if len(lows) < 1:
+
         return False
 
 
-    last_low = lows[-1]["price"]
+
+    return (
+
+        df.iloc[-1]["close"]
+
+        <
+
+        lows[-1]["price"]
+
+    )
 
 
-    close = df.iloc[-1]["close"]
-
-
-    return close < last_low
 
 
 
@@ -313,9 +461,13 @@ def bearish_mss(df):
 # =====================================
 
 def signal_score(
+
         df,
+
         direction
+
 ):
+
 
     score = 0
 
@@ -323,20 +475,31 @@ def signal_score(
 
     if direction == "LONG":
 
+
         if bullish_sfp(df):
+
             score += 35
 
+
         if bullish_mss(df):
+
             score += 35
+
 
 
     else:
 
+
         if bearish_sfp(df):
+
             score += 35
 
+
         if bearish_mss(df):
+
             score += 35
+
+
 
 
 
@@ -346,23 +509,38 @@ def signal_score(
 
 
 
+
+
     atr = calculate_atr(df)
+
 
     price = df.iloc[-1]["close"]
 
 
+
     if price > 0:
 
-        volatility = atr / price
 
+        if (
 
-        if volatility >= 0.003:
+            atr / price
+
+            >=
+
+            0.003
+
+        ):
 
             score += 15
 
 
 
+
+
     return min(
+
         score,
+
         100
+
     )
