@@ -23,13 +23,11 @@ def check_15m_mss(candles_15m, direction):
     closes = [c[4] for c in candles_15m]
     
     if direction == 'SHORT':
-        wick_high = max(highs[-5:-1])
         structural_low = min(lows[-9:-5])
         mss_confirmed = closes[-2] < structural_low
         return mss_confirmed, structural_low
         
     elif direction == 'LONG':
-        wick_low = min(lows[-5:-1])
         structural_high = max(highs[-9:-5])
         mss_confirmed = closes[-2] > structural_high
         return mss_confirmed, structural_high
@@ -62,7 +60,7 @@ def scan():
         logging.error("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден.")
         return
 
-    logging.info("🔍 Получаю тикеры с OKX и фильтрую по объему...\n")
+    logging.info("🔄 Получаю тикеры с OKX и фильтрую по объему...\n")
     
     try:
         exchange = ccxt.okx({
@@ -97,19 +95,16 @@ def scan():
         is_top_pair = i <= 10 
         
         try:
-            # БЕРЕМ 30 СВЕЧЕЙ
-            candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=30)
-            if len(candles_1h) < 28:
+            candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=20)
+            if len(candles_1h) < 15:
                 continue
                 
             closes_1h = [c[4] for c in candles_1h]
             highs_1h = [c[2] for c in candles_1h]
             lows_1h = [c[3] for c in candles_1h]
             
-            # ПРОВЕРЯЕМ ТОЛЬКО ПОСЛЕДНЮЮ ЗАКРЫТУЮ СВЕЧУ [-2]
-            # УРОВНИ БЕРЕМ ЗА 24 ЧАСА ДО НЕЁ (с -26 по -2)
-            recent_high_1h = max(highs_1h[-26:-2])
-            recent_low_1h = min(lows_1h[-26:-2])
+            recent_high_1h = max(highs_1h[-12:-2])
+            recent_low_1h = min(lows_1h[-12:-2])
             
             last_high_1h = highs_1h[-2]
             last_low_1h = lows_1h[-2]
@@ -118,31 +113,36 @@ def scan():
             is_short_sfp = (last_high_1h > recent_high_1h) and (last_close_1h < recent_high_1h)
             is_long_sfp = (last_low_1h < recent_low_1h) and (last_close_1h > recent_low_1h)
             
+            dist_to_high_pct = abs(last_high_1h - recent_high_1h) / recent_high_1h * 100
+            dist_to_low_pct = abs(last_low_1h - recent_low_1h) / recent_low_1h * 100
+            
             if is_top_pair:
                 logging.info(f"🔍 [ТОП-{i}] РАЗБОР: {symbol} (последняя закрытая 1H свеча)")
-                logging.info(f"   Уровни 24H: High={recent_high_1h:.2f}, Low={recent_low_1h:.2f}")
+                logging.info(f"   Уровни 10-12H: High={recent_high_1h:.2f}, Low={recent_low_1h:.2f}")
                 logging.info(f"   Свеча: High={last_high_1h:.2f}, Low={last_low_1h:.2f}, Close={last_close_1h:.2f}")
-                logging.info(f"   Расстояние до High: {abs(last_high_1h - recent_high_1h):.2f} ({abs(last_high_1h - recent_high_1h)/recent_high_1h*100:.2f}%)")
-                logging.info(f"   Расстояние до Low: {abs(last_low_1h - recent_low_1h):.2f} ({abs(last_low_1h - recent_low_1h)/recent_low_1h*100:.2f}%)")
+                logging.info(f"   Расстояние до High: {abs(last_high_1h - recent_high_1h):.2f} ({dist_to_high_pct:.2f}%)")
+                logging.info(f"   Расстояние до Low: {abs(last_low_1h - recent_low_1h):.2f} ({dist_to_low_pct:.2f}%)")
                 logging.info(f"   1H SFP Short: High={last_high_1h:.2f} > Recent={recent_high_1h:.2f} AND Close={last_close_1h:.2f} < Recent -> {is_short_sfp}")
                 logging.info(f"   1H SFP Long:  Low={last_low_1h:.2f} < Recent={recent_low_1h:.2f} AND Close={last_close_1h:.2f} > Recent -> {is_long_sfp}")
+                
+                if dist_to_low_pct < 0.5 and last_low_1h > recent_low_1h:
+                    logging.info(f"   ⚠️ ПОЧТИ SFP LONG: цена в {dist_to_low_pct:.2f}% от уровня Low")
+                if dist_to_high_pct < 0.5 and last_high_1h < recent_high_1h:
+                    logging.info(f"   ⚠️ ПОЧТИ SFP SHORT: цена в {dist_to_high_pct:.2f}% от уровня High")
             
             if not (is_short_sfp or is_long_sfp):
                 if is_top_pair:
                     logging.info(f"   ❌ Отказ: Нет SFP на 1H.\n")
                 continue
             
-            # Расчет среднего диапазона
-            ranges_1h = [h - l for h, l in zip(highs_1h[-26:-2], lows_1h[-26:-2])]
+            ranges_1h = [h - l for h, l in zip(highs_1h[-12:-2], lows_1h[-12:-2])]
             avg_range_1h = sum(ranges_1h) / len(ranges_1h) if ranges_1h else 1
             
-            # Тренд 4H
             candles_4h = exchange.fetch_ohlcv(symbol, '4h', limit=50)
             closes_4h = [c[4] for c in candles_4h]
             sma_20_4h = sum(closes_4h[-20:]) / 20
             current_price_4h = closes_4h[-1]
             
-            # MSS 15m
             candles_15m = exchange.fetch_ohlcv(symbol, '15m', limit=20)
             
             if is_short_sfp:
@@ -217,16 +217,16 @@ def scan():
     logging.info(f"\n--- ✅ СКАНИРОВАНИЕ ЗАВЕРШЕНО. Найдено сетапов: {len(found_signals)} ---")
     
     if len(found_signals) > 0:
-        msg = "🚨 *УМНЫЙ СКАН: SFP (1H) + MSS (15m) + ТРЕНД (4H)*\n\n"
+        msg = "🚀 *УМНЫЙ СКАН: SFP (1H) + MSS (15m) + ТРЕНД (4H)*\n\n"
         msg += "📊 Отсортировано по объему. MSS уже подтвержден!\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for i, sig in enumerate(found_signals[:15], 1):
-            emoji = "🔴" if sig['type'] == 'SHORT' else ""
+            emoji = "🔴" if sig['type'] == 'SHORT' else "🟢"
             vol_formatted = f"{sig['volume_usd']:,.0f}".replace(',', ' ')
             msg += (f"{i}. *{sig['symbol']}* | {emoji} *{sig['type']}*\n"
                     f"   📍 Вход: `{sig['entry']:.2f}` | Стоп: `{sig['stop']:.2f}`\n"
                     f"   💰 Поз: `${sig['pos_size']:.0f}` | Плечо: `{sig['leverage']}x`\n"
-                    f"   ⚠️ Риск: `${sig['risk']:.2f}` |  {sig['trend']}\n"
+                    f"   ⚠️ Риск: `${sig['risk']:.2f}` | {sig['trend']}\n"
                     f"   📈 Объем: `${vol_formatted}`\n\n")
             
         msg += "✅ _Сигналы прошли проверку слома структуры на 15м._"
