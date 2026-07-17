@@ -1,6 +1,5 @@
 import requests
 import pandas as pd
-import time
 
 
 BASE_URL = "https://api.geckoterminal.com/api/v2"
@@ -10,72 +9,90 @@ BASE_URL = "https://api.geckoterminal.com/api/v2"
 class GeckoTerminal:
 
 
+
     def __init__(self):
 
         self.headers = {
-            "accept": "application/json"
+
+            "accept":
+            "application/json"
+
         }
 
 
 
-    # ==================================
-    # Получение OHLCV свечей
-    # ==================================
+
 
     def get_ohlcv(
-        self,
-        network,
-        pool_address,
-        timeframe="minute_15",
-        limit=100
+
+            self,
+
+            network,
+
+            pool_address,
+
+            timeframe="minute_15",
+
+            limit=200
+
     ):
 
 
+
         url = (
+
             f"{BASE_URL}/networks/"
             f"{network}/pools/"
-            f"{pool_address}/ohlcv/{timeframe}"
+            f"{pool_address}/ohlcv/"
+            f"{timeframe}"
+
         )
+
 
 
         params = {
 
-            "limit": limit
+            "limit":
+            limit
 
         }
+
 
 
         try:
 
 
             response = requests.get(
+
                 url,
+
                 headers=self.headers,
+
                 params=params,
-                timeout=10
+
+                timeout=15
+
             )
 
 
-            if response.status_code != 200:
 
-                print(
-                    "Gecko API error:",
-                    response.status_code
-                )
+            if response.status_code != 200:
 
                 return None
 
 
 
-            data = response.json()
+            result = response.json()
 
 
 
             candles = (
-                data
+
+                result
                 .get("data", {})
                 .get("attributes", {})
                 .get("ohlcv_list", [])
+
             )
 
 
@@ -86,43 +103,72 @@ class GeckoTerminal:
 
 
 
+
             df = pd.DataFrame(
+
                 candles,
+
                 columns=[
+
                     "timestamp",
+
                     "open",
+
                     "high",
+
                     "low",
+
                     "close",
+
                     "volume"
+
                 ]
+
             )
 
 
-            # приводим типы
 
-            numeric = [
+            for column in [
+
                 "open",
+
                 "high",
+
                 "low",
+
                 "close",
+
                 "volume"
-            ]
+
+            ]:
 
 
-            for col in numeric:
+                df[column] = pd.to_numeric(
 
-                df[col] = (
-                    pd.to_numeric(
-                        df[col],
-                        errors="coerce"
-                    )
+                    df[column],
+
+                    errors="coerce"
+
                 )
 
 
 
+            df = df.dropna()
+
+
+
             df = df.sort_values(
+
                 "timestamp"
+
+            )
+
+
+
+            df = df.reset_index(
+
+                drop=True
+
             )
 
 
@@ -135,8 +181,10 @@ class GeckoTerminal:
 
 
             print(
-                "Gecko OHLCV error:",
+
+                "OHLCV error:",
                 e
+
             )
 
 
@@ -144,22 +192,26 @@ class GeckoTerminal:
 
 
 
-    # ==================================
-    # Информация о пуле
-    # ==================================
 
 
     def get_pool_data(
-        self,
-        network,
-        pool_address
+
+            self,
+
+            network,
+
+            pool_address
+
     ):
 
 
+
         url = (
+
             f"{BASE_URL}/networks/"
             f"{network}/pools/"
             f"{pool_address}"
+
         )
 
 
@@ -168,9 +220,13 @@ class GeckoTerminal:
 
 
             response = requests.get(
+
                 url,
+
                 headers=self.headers,
-                timeout=10
+
+                timeout=15
+
             )
 
 
@@ -185,39 +241,36 @@ class GeckoTerminal:
 
 
 
-            attributes = (
+            attr = (
+
                 data
                 .get("data", {})
                 .get("attributes", {})
+
             )
 
 
 
             return {
 
+
                 "name":
-                    attributes.get(
+
+                    attr.get(
                         "name"
                     ),
 
 
+
                 "liquidity":
+
                     float(
-                        attributes
-                        .get(
+
+                        attr.get(
                             "reserve_in_usd",
                             0
                         )
-                    ),
 
-
-                "volume24h":
-                    float(
-                        attributes
-                        .get(
-                            "volume_usd",
-                            0
-                        )
                     )
 
             }
@@ -228,8 +281,10 @@ class GeckoTerminal:
 
 
             print(
-                "Pool error:",
+
+                "Pool data error:",
                 e
+
             )
 
 
