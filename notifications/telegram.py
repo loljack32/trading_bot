@@ -7,38 +7,23 @@ from config import (
 
 
 
-# =====================================
-# Telegram отправка сообщений
-# =====================================
-
-
 class TelegramBot:
-
 
 
     def __init__(self):
 
         self.token = TELEGRAM_TOKEN
-
         self.chat_id = TELEGRAM_CHAT_ID
 
 
 
-    # =================================
-    # Отправка сообщения
-    # =================================
-
-
-    def send_message(
-            self,
-            text
-    ):
+    def send_message(self, text):
 
 
         if not self.token or not self.chat_id:
 
             print(
-                "Telegram credentials missing"
+                "Telegram config missing"
             )
 
             return False
@@ -46,24 +31,19 @@ class TelegramBot:
 
 
         url = (
-
             f"https://api.telegram.org/"
             f"bot{self.token}/sendMessage"
-
         )
 
 
 
         payload = {
 
-
             "chat_id":
                 self.chat_id,
 
-
             "text":
                 text,
-
 
             "parse_mode":
                 "HTML"
@@ -73,7 +53,6 @@ class TelegramBot:
 
 
         try:
-
 
             response = requests.post(
 
@@ -86,23 +65,7 @@ class TelegramBot:
             )
 
 
-
-            if response.status_code == 200:
-
-                return True
-
-
-
-            print(
-
-                "Telegram error:",
-                response.text
-
-            )
-
-
-
-            return False
+            return response.status_code == 200
 
 
 
@@ -110,7 +73,7 @@ class TelegramBot:
 
 
             print(
-                "Telegram exception:",
+                "Telegram error:",
                 e
             )
 
@@ -120,19 +83,14 @@ class TelegramBot:
 
 
 
-    # =================================
-    # Форматирование сигнала
-    # =================================
+    def send_signal(self, signal):
 
 
-    def send_signal(
-            self,
-            signal
-    ):
+        direction = signal["direction"]
 
 
 
-        if signal["direction"] == "LONG":
+        if direction == "LONG":
 
             emoji = "🟢"
 
@@ -143,12 +101,13 @@ class TelegramBot:
 
 
 
+
         message = f"""
 
 🔥 <b>SFP + MSS SIGNAL</b>
 
 
-{emoji} <b>{signal['direction']}</b>
+{emoji} <b>{direction}</b>
 
 
 <b>PAIR:</b>
@@ -159,24 +118,32 @@ class TelegramBot:
 {signal['network']}
 
 
+<b>CONFIDENCE:</b>
+{signal.get('confidence', 0)}%
+
+
+
 <b>ENTRY:</b>
 <code>{signal['entry']}</code>
 
 
-<b>STOP:</b>
+<b>STOP LOSS:</b>
 <code>{signal['stop']}</code>
 
 
-<b>TARGET:</b>
+<b>TAKE PROFIT:</b>
 <code>{signal['target']}</code>
+
 
 
 <b>LIQUIDITY:</b>
 ${signal['liquidity']}
 
 
-<b>VOLUME:</b>
+
+<b>VOLUME 24H:</b>
 ${signal.get('volume', 0)}
+
 
 
 <b>STRATEGY:</b>
