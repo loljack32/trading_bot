@@ -12,14 +12,14 @@ def score_signal(metrics: SignalMetrics, direction: str, htf_trend: str | None =
     if htf_trend is not None and htf_trend == direction:
         score += 15
     if metrics.trend_passed:
-        score += 15
+        score += 10
     if metrics.rsi_passed:
         score += 10
     if metrics.volume_passed:
         score += 7
     if metrics.atr_passed:
-        score += 4
+        score += 5
     if metrics.candle_strength_passed:
-        score += 4
+        score += 8
     score = min(score, 100)
-    return score, score >= 90
+    return score, score >= 85
