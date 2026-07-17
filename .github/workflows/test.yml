@@ -30,7 +30,7 @@ jobs:
         timeout 240 python main.py || true
       env:
         # Add your environment variables here if needed
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
         OKX_API_SECRET: ${{ secrets.OKX_API_SECRET }}
