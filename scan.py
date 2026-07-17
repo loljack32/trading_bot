@@ -43,7 +43,6 @@ def scan():
         
         tickers = exchange.fetch_tickers()
         
-        # ТРЕБОВАНИЕ: Фильтр по объему от $50,000
         min_volume_usd = 50_000 
         
         valid_symbols = []
@@ -57,7 +56,6 @@ def scan():
                         'info': info
                     })
         
-        # Сортируем по объему в $ по убыванию и берем топ-100 для сканирования
         valid_symbols.sort(key=lambda x: x['volume_usd'], reverse=True)
         top_symbols = valid_symbols[:100]
         
@@ -68,7 +66,6 @@ def scan():
         print(f"❌ Критическая ошибка при получении данных с OKX: {e}")
         return
 
-    # Список для хранения ВСЕХ найденных сигналов
     found_signals = []
     
     # 2. Цикл сканирования
@@ -77,7 +74,6 @@ def scan():
         volume_usd = item['volume_usd']
         
         try:
-            # --- ПРОВЕРКА 1H (Базовая) ---
             candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             if len(candles_1h) < 10:
                 continue
@@ -86,7 +82,6 @@ def scan():
             highs = [c[2] for c in candles_1h]
             lows = [c[3] for c in candles_1h]
             
-            # Исключаем текущую формирующуюся свечу [-1] из расчета исторических экстремумов
             recent_high = max(highs[-10:-1])
             recent_low = min(lows[-10:-1])
             
@@ -94,14 +89,12 @@ def scan():
             last_low = lows[-1]
             last_close = closes[-1]
             
-            # === ИСПРАВЛЕННАЯ ЛОГИКА SFP + НАСТОЯЩИЙ MSS ===
-            # Для SHORT: Цена пробила максимум (SFP), закрылась ниже него, И пробила локальный минимум последних 3 свечей (MSS)
+            # УЛУЧШЕННАЯ ЛОГИКА SFP + НАСТОЯЩИЙ MSS
             recent_min_for_mss = min(lows[-4:-1]) 
             is_short_sfp = (last_high > recent_high) and (last_close < recent_high)
             is_short_mss = (last_low < recent_min_for_mss)
             is_short_sfp_mss = is_short_sfp and is_short_mss
 
-            # Для LONG: Цена пробила минимум (SFP), закрылась выше него, И пробила локальный максимум последних 3 свечей (MSS)
             recent_max_for_mss = max(highs[-4:-1])
             is_long_sfp = (last_low < recent_low) and (last_close > recent_low)
             is_long_mss = (last_high > recent_max_for_mss)
@@ -110,17 +103,15 @@ def scan():
             if not (is_short_sfp_mss or is_long_sfp_mss):
                 continue
             
-            # --- ДИНАМИЧЕСКИЙ РАЗМЕР ФИТИЛЯ ---
             ranges = [h - l for h, l in zip(highs[-10:-1], lows[-10:-1])]
             avg_range = sum(ranges) / len(ranges) if ranges else 1
             
-            # --- КОНТЕКСТ 4H И ОБЩИЙ ТРЕНД ---
             candles_4h = exchange.fetch_ohlcv(symbol, '4h', limit=50)
             closes_4h = [c[4] for c in candles_4h]
             sma_20_4h = sum(closes_4h[-20:]) / 20
             current_price_4h = closes_4h[-1]
             
-            # 1. ПРОВЕРКА НА SHORT
+            # ПРОВЕРКА НА SHORT
             if is_short_sfp_mss:
                 current_wick = last_high - last_close
                 is_good_wick = (current_wick > avg_range * 1.5) and (current_wick < avg_range * 5.0)
@@ -149,9 +140,9 @@ def scan():
                         'trend': 'Медвежий (цена < SMA20)',
                         'volume_usd': volume_usd
                     })
-                    continue # Переходим к следующей монете, чтобы не дублировать LONG/SHORT на одной паре
+                    continue
 
-            # 2. ПРОВЕРКА НА LONG
+            # ПРОВЕРКА НА LONG
             if is_long_sfp_mss:
                 current_wick = last_close - last_low
                 is_good_wick = (current_wick > avg_range * 1.5) and (current_wick < avg_range * 5.0)
@@ -182,21 +173,17 @@ def scan():
                     })
                     
         except Exception as e:
-            # Тихий пропуск ошибок на отдельных парах, чтобы не ломать весь скан
             continue
 
-    # 3. СОРТИРОВКА И ОТПРАВКА ОДНОГО СООБЩЕНИЯ
-    # Сортируем найденные сигналы по объему (от большего к меньшему)
+    # 3. СОРТИРОВКА И ОТПРАВКА
     found_signals.sort(key=lambda x: x['volume_usd'], reverse=True)
     
     print(f"\n--- ✅ СКАНИРОВАНИЕ ЗАВЕРШЕНО. Всего найдено сетапов: {len(found_signals)} ---")
     
     if len(found_signals) > 0:
-        # Ограничиваем вывод топ-15, чтобы не превысить лимит символов Telegram (4096)
         display_limit = 15
         signals_to_show = found_signals[:display_limit]
         
-        # ФОРМИРОВАНИЕ СООБЩЕНИЯ В MARKDOWN
         msg = "🚨 *УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + MSS*\n\n"
         msg += "📊 Отсортировано по объему 24ч (чем выше, тем надежнее):\n"
         msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -207,7 +194,8 @@ def scan():
             
             msg += (f"{i}. *{sig['symbol']}* | {emoji} *{sig['type']}*\n"
                     f"   📍 Вход: `{sig['entry']:.2f}` | Стоп: `{sig['stop']:.2f}`\n"
-                    f"   💰 Поз: `<LaTex>id_1</LaTex>{sig['risk']:.2f}` | 📊 {sig['trend']}\n"
+                    f"   💰 Поз: `${sig['pos_size']:.0f}` | Плечо: `{sig['leverage']}x`\n"
+                    f"   ⚠️ Риск: `${sig['risk']:.2f}` | 📊 {sig['trend']}\n"
                     f"   📈 Объем 24ч: `${vol_formatted}`\n\n")
             
         if len(found_signals) > display_limit:
@@ -225,7 +213,6 @@ def scan():
             print(f"❌ Ошибка Telegram: {response.text}")
 
     else:
-        # СООБЩЕНИЕ "НЕТ СИГНАЛОВ"
         no_signal_msg = (
             "🔍 *Сканирование завершено*\n\n"
             f"Проверено {len(top_symbols)} самых ликвидных пар на OKX.\n\n"
@@ -237,4 +224,7 @@ def scan():
         requests.post(f'https://api.telegram.org/bot{bot_token}/sendMessage', 
                       json={'chat_id': chat_id, 'text': no_signal_msg, 'parse_mode': 'Markdown'})
 
+# ВНИМАНИЕ: Убедись, что ниже есть ровно 4 пробела перед словом scan()
 if __name__ == "__main__":
+    scan()
+
