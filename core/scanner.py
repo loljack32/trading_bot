@@ -6,7 +6,8 @@ from core.indicators import (
     bearish_sfp,
     bullish_mss,
     bearish_mss,
-    volume_confirmation
+    volume_confirmation,
+    signal_score
 )
 
 from config import MIN_LIQUIDITY
@@ -17,37 +18,53 @@ market = MarketScanner()
 
 
 
+# минимальный рейтинг сигнала
+
+MIN_SIGNAL_SCORE = 70
+
+
+
+
 # =====================================
-# Основной сканер рынка
+# Сканирование рынка
 # =====================================
 
+
 def scan_market(timeframe):
+
 
     signals = []
 
 
-    # Получаем топовые пулы автоматически
 
     pools = market.get_top_pools(
+
         "solana",
+
         100
+
     )
+
 
 
     for coin in pools:
 
 
+
         liquidity = coin.get(
+
             "liquidity",
+
             0
+
         )
 
 
-        # фильтр ликвидности
 
         if liquidity < MIN_LIQUIDITY:
 
             continue
+
 
 
 
@@ -69,29 +86,27 @@ def scan_market(timeframe):
 
 
 
-        if len(candles) < 50:
-
-            continue
-
-
-
-        volume_ok = volume_confirmation(
-            candles
-        )
-
-
-
-        if not volume_ok:
+        if len(candles) < 100:
 
             continue
 
 
 
 
-        # ==========================
-        # LONG SIGNAL
-        # ==========================
+        if not volume_confirmation(candles):
 
+            continue
+
+
+
+
+
+        direction = None
+
+
+
+
+        # LONG
 
         if (
 
@@ -103,33 +118,15 @@ def scan_market(timeframe):
 
         ):
 
-
-            signals.append(
-
-                create_signal(
-
-                    coin,
-
-                    candles,
-
-                    "LONG",
-
-                    liquidity
-
-                )
-
-            )
+            direction = "LONG"
 
 
 
 
 
-        # ==========================
-        # SHORT SIGNAL
-        # ==========================
+        # SHORT
 
-
-        if (
+        elif (
 
             bearish_sfp(candles)
 
@@ -139,22 +136,55 @@ def scan_market(timeframe):
 
         ):
 
+            direction = "SHORT"
 
-            signals.append(
 
-                create_signal(
 
-                    coin,
 
-                    candles,
 
-                    "SHORT",
+        if direction is None:
 
-                    liquidity
+            continue
 
-                )
+
+
+
+
+        score = signal_score(
+
+            candles,
+
+            direction
+
+        )
+
+
+
+        if score < MIN_SIGNAL_SCORE:
+
+            continue
+
+
+
+
+
+        signals.append(
+
+            create_signal(
+
+                coin,
+
+                candles,
+
+                direction,
+
+                liquidity,
+
+                score
 
             )
+
+        )
 
 
 
@@ -177,14 +207,19 @@ def create_signal(
 
         direction,
 
-        liquidity
+        liquidity,
+
+        score
 
 ):
 
 
-    price = float(
+    entry = float(
+
         df.iloc[-1]["close"]
+
     )
+
 
 
 
@@ -192,20 +227,30 @@ def create_signal(
 
 
         stop = float(
+
             df["low"]
             .tail(10)
             .min()
+
         )
 
 
         target = (
-            price
+
+            entry
+
             +
+
             (
-                price - stop
+
+                entry - stop
+
             )
+
             *
+
             2
+
         )
 
 
@@ -213,22 +258,34 @@ def create_signal(
     else:
 
 
+
         stop = float(
+
             df["high"]
             .tail(10)
             .max()
+
         )
 
 
         target = (
-            price
+
+            entry
+
             -
+
             (
-                stop - price
+
+                stop - entry
+
             )
+
             *
+
             2
+
         )
+
 
 
 
@@ -236,6 +293,7 @@ def create_signal(
 
 
         "pair":
+
             coin.get(
                 "name",
                 "UNKNOWN"
@@ -243,50 +301,70 @@ def create_signal(
 
 
         "network":
+
             coin.get(
                 "network"
             ),
 
 
         "pool":
+
             coin.get(
                 "pool"
             ),
 
 
+
         "direction":
+
             direction,
 
 
+
+        "confidence":
+
+            score,
+
+
+
         "entry":
+
             round(
-                price,
+                entry,
                 8
             ),
 
 
+
         "stop":
+
             round(
                 stop,
                 8
             ),
 
 
+
         "target":
+
             round(
                 target,
                 8
             ),
 
 
+
         "liquidity":
+
             round(
                 liquidity,
                 2
             ),
 
 
+
         "volume":
+
             round(
                 coin.get(
                     "volume",
