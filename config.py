@@ -91,13 +91,13 @@ SWING_LOOKBACK = 5
 
 # минимальный размер хвоста свечи
 
-MIN_WICK_PERCENT = 0.3
+MIN_WICK_PERCENT = 0.25
 
 
 
 # фильтр объёма
 
-VOLUME_MULTIPLIER = 1.5
+VOLUME_MULTIPLIER = 1.2
 
 
 
@@ -109,7 +109,7 @@ ATR_PERIOD = 14
 
 # минимальный рейтинг сигнала
 
-MIN_SIGNAL_SCORE = 70
+MIN_SIGNAL_SCORE = 68
 
 
 
