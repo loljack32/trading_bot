@@ -12,11 +12,13 @@ from config import (
 )
 
 
+
 # ============================================================
-# EMA 200 TREND
+# EMA TREND
 # ============================================================
 
 def ema200_trend(df):
+
 
     ema = (
         df["close"]
@@ -31,7 +33,7 @@ def ema200_trend(df):
     price = df["close"].iloc[-1]
 
 
-    if price > ema.iloc[-1]:
+    if price >= ema.iloc[-1]:
 
         return "LONG"
 
@@ -40,11 +42,14 @@ def ema200_trend(df):
 
 
 
+
+
 # ============================================================
 # RSI
 # ============================================================
 
 def calculate_rsi(df):
+
 
     delta = df["close"].diff()
 
@@ -74,9 +79,17 @@ def calculate_rsi(df):
     )
 
 
-    return float(
-        rsi.iloc[-1]
-    )
+    value = rsi.iloc[-1]
+
+
+    if pd.isna(value):
+
+        return 50
+
+
+    return float(value)
+
+
 
 
 
@@ -85,6 +98,7 @@ def calculate_rsi(df):
 # ============================================================
 
 def calculate_atr(df):
+
 
     high_low = (
         df["high"]
@@ -117,12 +131,22 @@ def calculate_atr(df):
     ).max(axis=1)
 
 
-    return float(
+    atr = (
         tr
         .rolling(ATR_PERIOD)
         .mean()
         .iloc[-1]
     )
+
+
+    if pd.isna(atr):
+
+        return 0
+
+
+    return float(atr)
+
+
 
 
 
@@ -136,17 +160,26 @@ def rsi_check(df, direction):
     rsi = calculate_rsi(df)
 
 
+
     if direction == "LONG":
 
-        return 35 <= rsi <= 70
+        return (
+            30 <= rsi <= 75
+        )
+
 
 
     if direction == "SHORT":
 
-        return 30 <= rsi <= 65
+        return (
+            25 <= rsi <= 70
+        )
 
 
     return False
+
+
+
 
 
 
@@ -160,20 +193,28 @@ def atr_check(df):
     atr = calculate_atr(df)
 
 
-    price = (
-        df["close"]
-        .iloc[-1]
+    price = float(
+        df["close"].iloc[-1]
     )
 
 
-    return (
-        atr / price >= 0.0025
-    )
+    if price == 0:
+
+        return False
+
+
+
+    volatility = atr / price
+
+
+    return volatility >= 0.0015
+
+
 
 
 
 # ============================================================
-# QUALITY SCORE
+# QUALITY CHECK
 # ============================================================
 
 def quality_check(
@@ -187,19 +228,15 @@ def quality_check(
 
 
 
-    # EMA200
+    # EMA
 
     trend = ema200_trend(df)
 
 
+
     if trend == direction:
 
-        score += 25
-
-
-    else:
-
-        score -= 10
+        score += 30
 
 
 
@@ -214,23 +251,13 @@ def quality_check(
 
 
 
-    else:
-
-        score -= 10
-
-
 
     # ATR
 
     if atr_check(df):
 
-        score += 15
+        score += 20
 
-
-
-    else:
-
-        score -= 10
 
 
 
@@ -239,26 +266,25 @@ def quality_check(
     if higher_trend:
 
 
-        if direction == higher_trend:
+        if higher_trend == direction:
 
-            score += 25
+            score += 30
 
 
         else:
 
-            score -= 15
+            score += 0
 
 
 
-    # ограничение
 
-    if score < 0:
+    if score > 100:
 
-        score = 0
+        score = 100
 
 
 
     return (
-        score >= 40,
+        score >= 50,
         score
     )
