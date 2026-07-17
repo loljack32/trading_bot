@@ -80,7 +80,6 @@ def scan():
             print(f"🔄 [{i}/{len(top_symbols)}] Проверяю {symbol:<15} ...", end=" ")
             
             # --- ПРОВЕРКА 1H (Базовая) ---
-                        # --- ПРОВЕРКА 1H (Базовая) ---
             candles_1h = exchange.fetch_ohlcv(symbol, '1h', limit=20)
             if len(candles_1h) < 10:
                 print("недостаточно данных")
@@ -90,6 +89,7 @@ def scan():
             highs = [c[2] for c in candles_1h]
             lows = [c[3] for c in candles_1h]
             
+            # ВАЖНО: [-10:-1] исключает текущую формирующуюся свечу из расчета максимума/минимума
             recent_high = max(highs[-10:-1])
             recent_low = min(lows[-10:-1])
             
@@ -98,17 +98,15 @@ def scan():
             last_close = closes[-1]
             prev_close = closes[-2]
             
-            # 🐞 ОТЛАДКА: показываем, что бот сравнивает
+            # 🐞 ОТЛАДКА: показываем, что бот сравнивает (можно удалить потом, если надоест)
             print(f"🐞 DEBUG | {symbol}")
             print(f"    Прошлый макс (10 свечей без текущей): {recent_high}")
-            print(f"   🐞 Прошлый мин (10 свечей без текущей): {recent_low}")
-            print(f"   🐞 Текущая свеча: high={last_high}, low={last_low}, close={last_close}")
-            print(f"   🐞 Предыдущая свеча close: {prev_close}")
-            print(f"   🐞 Пробой вверх? {last_high} > {recent_high} = {last_high > recent_high}")
-            print(f"   🐞 Пробой вниз? {last_low} < {recent_low} = {last_low < recent_low}")
+            print(f"    Прошлый мин (10 свечей без текущей): {recent_low}")
+            print(f"    Текущая свеча: high={last_high}, low={last_low}, close={last_close}")
+            print(f"    Предыдущая свеча close: {prev_close}")
+            print(f"    Пробой вверх? {last_high} > {recent_high} = {last_high > recent_high}")
+            print(f"    Пробой вниз? {last_low} < {recent_low} = {last_low < recent_low}")
 
-
-            
             # Условия SFP + MSS для обоих направлений
             is_short_sfp_mss = (last_high > recent_high) and (last_close < recent_high) and (last_close < prev_close)
             is_long_sfp_mss = (last_low < recent_low) and (last_close > recent_low) and (last_close > prev_close)
@@ -158,7 +156,7 @@ def scan():
                         'trend': 'Медвежий (цена < SMA20)',
                         'volume_usd': volume_usd
                     })
-                    continue # Переходим к следующей монете, чтобы не дублировать Long/Short на одной, если вдруг
+                    continue # Переходим к следующей монете
 
             # 2. ПРОВЕРКА НА LONG
             if is_long_sfp_mss:
@@ -208,30 +206,29 @@ def scan():
         display_limit = 15
         signals_to_show = found_signals[:display_limit]
         
-                msg = "🚨 *УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + MSS*\n\n"
-        msg += f"📊 Отсортировано по объему 24ч (чем выше, тем надежнее):\n"
-        msg += f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        # ФОРМИРОВАНИЕ СООБЩЕНИЯ В MARKDOWN (без HTML тегов!)
+        msg = "🚨 *УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + MSS*\n\n"
+        msg += "📊 Отсортировано по объему 24ч (чем выше, тем надежнее):\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for i, sig in enumerate(signals_to_show, 1):
             emoji = "🔴" if sig['type'] == 'SHORT' else "🟢"
             vol_formatted = f"{sig['volume_usd']:,.0f}".replace(',', ' ')
             
-            msg += (f"{i}.  *{sig['symbol']}* | {emoji} *{sig['type']}*\n"
+            msg += (f"{i}. *{sig['symbol']}* | {emoji} *{sig['type']}*\n"
                     f"   📍 Вход: `{sig['entry']:.2f}` | Стоп: `{sig['stop']:.2f}`\n"
                     f"   💰 Поз: `${sig['pos_size']:.0f}` | Плечо: `{sig['leverage']}x`\n"
                     f"   ⚠️ Риск: `${sig['risk']:.2f}` | 📊 {sig['trend']}\n"
                     f"   📈 Объем 24ч: `${vol_formatted}`\n\n")
-
-
             
         if len(found_signals) > display_limit:
-            msg += f"⚠️ <i>Показаны топ-{display_limit} из {len(found_signals)}. Остальные отфильтрованы по меньшему объему.</i>\n\n"
+            msg += f"⚠️ _Показаны топ-{display_limit} из {len(found_signals)}. Остальные отфильтрованы по меньшему объему._\n\n"
             
-        msg += "⚠️ <i>Не забывай про риск-менеджмент! Проверяй график на 15м перед входом.</i>"
+        msg += "⚠️ _Не забывай про риск-менеджмент! Проверяй график на 15м перед входом._"
         
         print("📤 Отправляю сводный отчет в Telegram...")
         response = requests.post(f'https://api.telegram.org/bot{bot_token}/sendMessage', 
-                      json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'HTML'})
+                      json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'Markdown'})
         
         if response.status_code == 200:
             print("✅ Успешно отправлено!")
@@ -239,16 +236,17 @@ def scan():
             print(f"❌ Ошибка Telegram: {response.text}")
 
     else:
+        # СООБЩЕНИЕ "НЕТ СИГНАЛОВ" ТОЖЕ В MARKDOWN
         no_signal_msg = (
-            "🔍 <b>Сканирование завершено</b>\n\n"
+            "🔍 *Сканирование завершено*\n\n"
             f"Проверено {len(top_symbols)} самых ликвидных пар на OKX.\n\n"
-            "Четких сигналов <b>SFP+MSS</b> с подтверждением тренда 4H и правильным фитилем не найдено.\n\n"
+            "Четких сигналов *SFP+MSS* с подтверждением тренда 4H и правильным фитилем не найдено.\n\n"
             "✅ Это хорошо: рынок в шуме или боковике. Бот спас твой депозит от лишних сделок.\n\n"
             "⏳ Жди следующего обновления!"
         )
         print("📤 Отправляю сообщение 'Нет сигналов' в Telegram...")
         requests.post(f'https://api.telegram.org/bot{bot_token}/sendMessage', 
-                      json={'chat_id': chat_id, 'text': no_signal_msg, 'parse_mode': 'HTML'})
+                      json={'chat_id': chat_id, 'text': no_signal_msg, 'parse_mode': 'Markdown'})
 
 if __name__ == "__main__":
     scan()
