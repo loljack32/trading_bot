@@ -208,20 +208,21 @@ def scan():
         display_limit = 15
         signals_to_show = found_signals[:display_limit]
         
-        msg = "🚨 <b>УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + MSS</b>\n\n"
+                msg = "🚨 *УМНЫЙ СКАН: ТОП СЕТАПЫ SFP + MSS*\n\n"
         msg += f"📊 Отсортировано по объему 24ч (чем выше, тем надежнее):\n"
         msg += f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for i, sig in enumerate(signals_to_show, 1):
             emoji = "🔴" if sig['type'] == 'SHORT' else "🟢"
-            # Форматируем объем с запятыми (например, 1,250,000,000)
             vol_formatted = f"{sig['volume_usd']:,.0f}".replace(',', ' ')
             
-            msg += (f"{i}. 💎 <b>{sig['symbol']}</b> | {emoji} <b>{sig['type']}</b>\n"
-                    f"   📍 Вход: <code>{sig['entry']:.2f}</code> | Стоп: <code>{sig['stop']:.2f}</code>\n"
-                    f"   💰 Поз: <code>${sig['pos_size']:.0f}</code> | Плечо: <code>{sig['leverage']}x</code>\n"
-                    f"   ⚠️ Риск: <code>${sig['risk']:.2f}</code> | 📊 {sig['trend']}\n"
-                    f"   📈 Объем 24ч: <code>${vol_formatted}</code>\n\n")
+            msg += (f"{i}.  *{sig['symbol']}* | {emoji} *{sig['type']}*\n"
+                    f"   📍 Вход: `{sig['entry']:.2f}` | Стоп: `{sig['stop']:.2f}`\n"
+                    f"   💰 Поз: `${sig['pos_size']:.0f}` | Плечо: `{sig['leverage']}x`\n"
+                    f"   ⚠️ Риск: `${sig['risk']:.2f}` | 📊 {sig['trend']}\n"
+                    f"   📈 Объем 24ч: `${vol_formatted}`\n\n")
+
+
             
         if len(found_signals) > display_limit:
             msg += f"⚠️ <i>Показаны топ-{display_limit} из {len(found_signals)}. Остальные отфильтрованы по меньшему объему.</i>\n\n"
