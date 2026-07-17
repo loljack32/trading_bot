@@ -10,24 +10,16 @@ from core.indicators import (
     signal_score
 )
 
-from config import MIN_LIQUIDITY
+from config import (
+    NETWORKS,
+    MIN_LIQUIDITY,
+    MIN_SIGNAL_SCORE
+)
 
 
 gecko = GeckoTerminal()
 market = MarketScanner()
 
-
-
-# минимальный рейтинг сигнала
-
-MIN_SIGNAL_SCORE = 70
-
-
-
-
-# =====================================
-# Сканирование рынка
-# =====================================
 
 
 def scan_market(timeframe):
@@ -37,154 +29,134 @@ def scan_market(timeframe):
 
 
 
-    pools = market.get_top_pools(
-
-        "solana",
-
-        100
-
-    )
+    for network in NETWORKS:
 
 
 
-    for coin in pools:
+        pools = market.get_top_pools(
 
+            network,
 
-
-        liquidity = coin.get(
-
-            "liquidity",
-
-            0
+            100
 
         )
 
 
 
-        if liquidity < MIN_LIQUIDITY:
+        for coin in pools:
 
-            continue
 
 
+            if coin["liquidity"] < MIN_LIQUIDITY:
 
+                continue
 
-        candles = gecko.get_ohlcv(
 
-            coin["network"],
 
-            coin["pool"],
 
-            timeframe
+            candles = gecko.get_ohlcv(
 
-        )
+                coin["network"],
 
+                coin["pool"],
 
-
-        if candles is None:
-
-            continue
-
-
-
-        if len(candles) < 100:
-
-            continue
-
-
-
-
-        if not volume_confirmation(candles):
-
-            continue
-
-
-
-
-
-        direction = None
-
-
-
-
-        # LONG
-
-        if (
-
-            bullish_sfp(candles)
-
-            and
-
-            bullish_mss(candles)
-
-        ):
-
-            direction = "LONG"
-
-
-
-
-
-        # SHORT
-
-        elif (
-
-            bearish_sfp(candles)
-
-            and
-
-            bearish_mss(candles)
-
-        ):
-
-            direction = "SHORT"
-
-
-
-
-
-        if direction is None:
-
-            continue
-
-
-
-
-
-        score = signal_score(
-
-            candles,
-
-            direction
-
-        )
-
-
-
-        if score < MIN_SIGNAL_SCORE:
-
-            continue
-
-
-
-
-
-        signals.append(
-
-            create_signal(
-
-                coin,
-
-                candles,
-
-                direction,
-
-                liquidity,
-
-                score
+                timeframe
 
             )
 
-        )
+
+
+            if candles is None:
+
+                continue
+
+
+
+            if len(candles) < 100:
+
+                continue
+
+
+
+            if not volume_confirmation(candles):
+
+                continue
+
+
+
+
+            direction = None
+
+
+
+            if (
+
+                bullish_sfp(candles)
+
+                and
+
+                bullish_mss(candles)
+
+            ):
+
+                direction = "LONG"
+
+
+
+            elif (
+
+                bearish_sfp(candles)
+
+                and
+
+                bearish_mss(candles)
+
+            ):
+
+                direction = "SHORT"
+
+
+
+
+            if not direction:
+
+                continue
+
+
+
+
+            score = signal_score(
+
+                candles,
+
+                direction
+
+            )
+
+
+
+            if score < MIN_SIGNAL_SCORE:
+
+                continue
+
+
+
+
+            signals.append(
+
+                create_signal(
+
+                    coin,
+
+                    candles,
+
+                    direction,
+
+                    score
+
+                )
+
+            )
 
 
 
@@ -194,11 +166,6 @@ def scan_market(timeframe):
 
 
 
-# =====================================
-# Создание сигнала
-# =====================================
-
-
 def create_signal(
 
         coin,
@@ -206,8 +173,6 @@ def create_signal(
         df,
 
         direction,
-
-        liquidity,
 
         score
 
@@ -219,7 +184,6 @@ def create_signal(
         df.iloc[-1]["close"]
 
     )
-
 
 
 
@@ -237,9 +201,7 @@ def create_signal(
 
         target = (
 
-            entry
-
-            +
+            entry +
 
             (
 
@@ -247,16 +209,12 @@ def create_signal(
 
             )
 
-            *
-
-            2
+            * 2
 
         )
 
 
-
     else:
-
 
 
         stop = float(
@@ -270,9 +228,7 @@ def create_signal(
 
         target = (
 
-            entry
-
-            -
+            entry -
 
             (
 
@@ -280,12 +236,9 @@ def create_signal(
 
             )
 
-            *
-
-            2
+            * 2
 
         )
-
 
 
 
@@ -294,25 +247,17 @@ def create_signal(
 
         "pair":
 
-            coin.get(
-                "name",
-                "UNKNOWN"
-            ),
+            coin["name"],
 
 
         "network":
 
-            coin.get(
-                "network"
-            ),
+            coin["network"],
 
 
         "pool":
 
-            coin.get(
-                "pool"
-            ),
-
+            coin["pool"],
 
 
         "direction":
@@ -320,56 +265,38 @@ def create_signal(
             direction,
 
 
-
         "confidence":
 
             score,
 
 
-
         "entry":
 
-            round(
-                entry,
-                8
-            ),
-
+            round(entry, 8),
 
 
         "stop":
 
-            round(
-                stop,
-                8
-            ),
-
+            round(stop, 8),
 
 
         "target":
 
-            round(
-                target,
-                8
-            ),
-
+            round(target, 8),
 
 
         "liquidity":
 
             round(
-                liquidity,
+                coin["liquidity"],
                 2
             ),
-
 
 
         "volume":
 
             round(
-                coin.get(
-                    "volume",
-                    0
-                ),
+                coin["volume"],
                 2
             )
 
