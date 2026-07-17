@@ -131,7 +131,6 @@ class OKXClient:
 
 
 
-                # только USDT perpetual
 
                 if not symbol.endswith(
 
@@ -144,30 +143,44 @@ class OKXClient:
 
 
 
-                # пропускаем неактивные
 
-                                state = item.get(
+                state = item.get(
+
                     "state",
+
                     "live"
+
                 )
 
+
+
                 if state != "live":
+
                     continue
 
 
 
 
-                volume = float(
 
-                    item.get(
+                try:
 
-                        "volCcy24h",
+                    volume = float(
 
-                        0
+                        item.get(
+
+                            "volCcy24h",
+
+                            0
+
+                        )
 
                     )
 
-                )
+                except:
+
+                    continue
+
+
 
 
 
@@ -308,6 +321,8 @@ class OKXClient:
 
 
 
+
+
         for attempt in range(3):
 
 
@@ -330,7 +345,6 @@ class OKXClient:
 
 
                 data = response.json()
-
 
 
 
@@ -366,7 +380,6 @@ class OKXClient:
 
                 if not candles:
 
-
                     return None
 
 
@@ -378,7 +391,6 @@ class OKXClient:
 
 
                 for candle in candles:
-
 
 
                     rows.append(
@@ -426,7 +438,6 @@ class OKXClient:
                     ]
 
                 )
-
 
 
 
@@ -499,7 +510,6 @@ class OKXClient:
 
 
 
-
                 # удаляем незакрытую свечу
 
                 if len(df) > 1:
@@ -510,13 +520,25 @@ class OKXClient:
 
 
 
-                                time.sleep(
+                time.sleep(
+
                     REQUEST_DELAY
+
                 )
 
+
+
+
+
                 print(
+
                     f"{symbol} {timeframe}: {len(df)} candles"
+
                 )
+
+
+
+
 
                 return df
 
@@ -525,7 +547,6 @@ class OKXClient:
 
 
             except Exception as e:
-
 
 
                 print(
@@ -584,6 +605,8 @@ class OKXClient:
             symbol
 
         }
+
+
 
 
 
