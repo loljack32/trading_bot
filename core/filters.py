@@ -3,9 +3,7 @@
 # Advanced Quality Filters
 # ============================================================
 
-
 import pandas as pd
-
 
 from config import (
     EMA_PERIOD,
@@ -14,16 +12,11 @@ from config import (
 )
 
 
-
-
-
 # ============================================================
-# EMA TREND
+# EMA 200 TREND
 # ============================================================
-
 
 def ema200_trend(df):
-
 
     ema = (
         df["close"]
@@ -35,9 +28,7 @@ def ema200_trend(df):
     )
 
 
-
     price = df["close"].iloc[-1]
-
 
 
     if price > ema.iloc[-1]:
@@ -45,12 +36,7 @@ def ema200_trend(df):
         return "LONG"
 
 
-
     return "SHORT"
-
-
-
-
 
 
 
@@ -58,61 +44,39 @@ def ema200_trend(df):
 # RSI
 # ============================================================
 
-
-def calculate_rsi(
-        df
-):
-
+def calculate_rsi(df):
 
     delta = df["close"].diff()
 
 
-
     gain = (
-
         delta
         .clip(lower=0)
         .rolling(RSI_PERIOD)
         .mean()
-
     )
 
 
-
     loss = (
-
         -delta
         .clip(upper=0)
         .rolling(RSI_PERIOD)
         .mean()
-
     )
-
 
 
     rs = gain / loss
 
 
-
     rsi = 100 - (
-
         100 /
-
         (1 + rs)
-
     )
-
 
 
     return float(
-
         rsi.iloc[-1]
-
     )
-
-
-
-
 
 
 
@@ -120,127 +84,75 @@ def calculate_rsi(
 # ATR
 # ============================================================
 
-
 def calculate_atr(df):
 
-
     high_low = (
-
         df["high"]
-
         -
-
         df["low"]
-
     )
 
 
-
     high_close = abs(
-
         df["high"]
-
         -
-
         df["close"].shift()
-
     )
 
 
     low_close = abs(
-
         df["low"]
-
         -
-
         df["close"].shift()
-
     )
 
 
-
     tr = pd.concat(
-
         [
-
             high_low,
-
             high_close,
-
             low_close
-
         ],
-
         axis=1
-
     ).max(axis=1)
 
 
-
     return float(
-
         tr
         .rolling(ATR_PERIOD)
         .mean()
         .iloc[-1]
-
     )
 
 
 
-
-
-
-
 # ============================================================
-# RSI CHECK
+# RSI FILTER
 # ============================================================
 
-
-def rsi_check(
-        df,
-        direction
-):
+def rsi_check(df, direction):
 
 
     rsi = calculate_rsi(df)
 
 
-
     if direction == "LONG":
 
-
-        return (
-
-            40 <= rsi <= 70
-
-        )
-
+        return 35 <= rsi <= 70
 
 
     if direction == "SHORT":
 
-
-        return (
-
-            30 <= rsi <= 60
-
-        )
-
+        return 30 <= rsi <= 65
 
 
     return False
 
 
 
-
-
-
-
 # ============================================================
-# ATR CHECK
+# ATR FILTER
 # ============================================================
-
 
 def atr_check(df):
 
@@ -248,48 +160,26 @@ def atr_check(df):
     atr = calculate_atr(df)
 
 
-
     price = (
-
         df["close"]
-
         .iloc[-1]
-
     )
 
-
-
-    volatility = atr / price
-
-
-
-    # минимум 0.25% движения
 
     return (
-
-        volatility >= 0.0025
-
+        atr / price >= 0.0025
     )
 
 
 
-
-
-
-
 # ============================================================
-# QUALITY CHECK
+# QUALITY SCORE
 # ============================================================
-
 
 def quality_check(
-
         df,
-
         direction,
-
         higher_trend=None
-
 ):
 
 
@@ -297,100 +187,78 @@ def quality_check(
 
 
 
-
-    # -------------------------
     # EMA200
-    # -------------------------
-
 
     trend = ema200_trend(df)
 
 
-
     if trend == direction:
-
 
         score += 25
 
 
     else:
 
+        score -= 10
+
+
+
+    # RSI
+
+    if rsi_check(
+        df,
+        direction
+    ):
+
+        score += 20
+
+
+
+    else:
 
         score -= 10
 
 
 
-
-
-    # -------------------------
-    # RSI
-    # -------------------------
-
-
-    if rsi_check(
-
-        df,
-
-        direction
-
-    ):
-
-
-        score += 20
-
-
-    else:
-
-
-        return False, score
-
-
-
-
-
-
-    # -------------------------
     # ATR
-    # -------------------------
-
 
     if atr_check(df):
-
 
         score += 15
 
 
+
     else:
 
-
-        return False, score
-
+        score -= 10
 
 
 
-
-
-    # -------------------------
     # HTF
-    # -------------------------
-
 
     if higher_trend:
 
 
         if direction == higher_trend:
 
-
-            score += 40
+            score += 25
 
 
         else:
 
-
-            return False, score
-
+            score -= 15
 
 
 
+    # ограничение
 
-    return True, score
+    if score < 0:
+
+        score = 0
+
+
+
+    return (
+        score >= 40,
+        score
+    )
