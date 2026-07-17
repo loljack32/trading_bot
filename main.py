@@ -272,7 +272,6 @@ def add_history(
 
 def main():
 
-
     print()
 
     print("======================")
@@ -287,8 +286,28 @@ def main():
     history = load_history()
 
 
+    # приоритет таймфреймов
+    priority_timeframes = [
 
-    for timeframe in TIMEFRAMES:
+        "4H",
+
+        "1H",
+
+        "15m"
+
+    ]
+
+
+    selected_signals = []
+
+
+
+    # =====================================
+    # SCAN WITH PRIORITY
+    # =====================================
+
+
+    for timeframe in priority_timeframes:
 
 
         print()
@@ -299,14 +318,12 @@ def main():
         )
 
 
-
         try:
 
 
             signals = scan_market(
                 timeframe
             )
-
 
 
         except Exception as e:
@@ -317,14 +334,26 @@ def main():
                 e
             )
 
-
             continue
 
 
 
+        if signals:
 
 
-        if not signals:
+            print(
+                f"Signals found on {timeframe}"
+            )
+
+
+            selected_signals = signals
+
+
+            break
+
+
+
+        else:
 
 
             print(
@@ -332,14 +361,24 @@ def main():
             )
 
 
-            continue
+
+    # =====================================
+    # SEND ONLY BEST TIMEFRAME
+    # =====================================
 
 
+    if not selected_signals:
 
 
+        print(
+            "No signals anywhere"
+        )
 
-        for signal in signals:
 
+    else:
+
+
+        for signal in selected_signals:
 
 
             print(
@@ -385,15 +424,12 @@ def main():
                 )
 
 
-
             else:
 
 
                 print(
                     "Duplicate signal"
                 )
-
-
 
 
 
@@ -407,7 +443,6 @@ def main():
     print(
         "SCAN COMPLETE"
     )
-
 
 
 
