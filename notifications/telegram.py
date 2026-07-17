@@ -1,179 +1,173 @@
 # ============================================================
-# core/telegram.py
-# Надежная отправка сигналов в Telegram
+# notifications/telegram.py
+# Telegram notifier
 # ============================================================
 
 import requests
 
-from config import (
-    TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID
-)
+
+class TelegramBot:
 
 
+    def __init__(self, config):
 
-# ============================================================
-# Отправка сообщения
-# ============================================================
+        self.config = config
 
-def send_telegram(message: str):
+        self.token = getattr(
+            config,
+            "TELEGRAM_TOKEN",
+            None
+        )
 
-    if not TELEGRAM_BOT_TOKEN:
-        print("Telegram disabled: no token")
-        return False
-
-
-    if not TELEGRAM_CHAT_ID:
-        print("Telegram disabled: no chat id")
-        return False
-
-
-
-    url = (
-        f"https://api.telegram.org/"
-        f"bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    )
-
-
-
-    payload = {
-
-        "chat_id": TELEGRAM_CHAT_ID,
-
-        "text": message,
-
-        "parse_mode": "HTML"
-
-    }
-
-
-
-    try:
-
-        response = requests.post(
-
-            url,
-
-            json=payload,
-
-            timeout=10
-
+        self.chat_id = getattr(
+            config,
+            "TELEGRAM_CHAT_ID",
+            None
         )
 
 
 
-        data = response.json()
+    # --------------------------------------------------------
+
+    def send(self, message):
 
 
-
-        if not data.get("ok"):
+        if not self.token:
 
             print(
-                "Telegram API error:",
-                data
+                "Telegram disabled: token missing"
             )
 
             return False
 
 
 
-        return True
+        if not self.chat_id:
+
+            print(
+                "Telegram disabled: chat id missing"
+            )
+
+            return False
 
 
 
-    except requests.exceptions.Timeout:
-
-        print(
-            "Telegram error: timeout"
+        url = (
+            f"https://api.telegram.org/"
+            f"bot{self.token}/sendMessage"
         )
 
-        return False
+
+        payload = {
+
+            "chat_id": self.chat_id,
+
+            "text": message,
+
+            "parse_mode": "HTML"
+
+        }
 
 
 
-    except requests.exceptions.ConnectionError:
-
-        print(
-            "Telegram error: network connection"
-        )
-
-        return False
+        try:
 
 
+            response = requests.post(
 
-    except Exception as e:
+                url,
 
-        print(
-            "Telegram error:",
-            str(e)
-        )
+                json=payload,
 
-        return False
+                timeout=10
+
+            )
 
 
 
-
-
-# ============================================================
-# Форматирование торгового сигнала
-# ============================================================
-
-def format_signal(signal):
-
-
-    direction_icon = (
-        "🟢"
-        if signal["direction"] == "LONG"
-        else
-        "🔴"
-    )
+            data = response.json()
 
 
 
-    text = f"""
-
-{direction_icon} <b>SFP MSS SIGNAL</b>
+            if not data.get("ok"):
 
 
-<b>Pair:</b> {signal['pair']}
+                print(
+                    "Telegram API error:",
+                    data
+                )
 
-<b>Exchange:</b> {signal['exchange']}
-
-<b>Direction:</b> {signal['direction']}
-
-<b>Confidence:</b> {signal['confidence']}%
-
-
-<b>Entry:</b> {signal['entry']}
-
-<b>Stop:</b> {signal['stop']}
-
-<b>Target:</b> {signal['target']}
+                return False
 
 
-<b>Volume:</b> {signal['volume']}
+
+            return True
 
 
-⚡ Risk / Reward: 1:2
+
+        except requests.exceptions.Timeout:
+
+
+            print(
+                "Telegram timeout"
+            )
+
+            return False
+
+
+
+        except requests.exceptions.ConnectionError:
+
+
+            print(
+                "Telegram network error"
+            )
+
+            return False
+
+
+
+        except Exception as e:
+
+
+            print(
+                "Telegram error:",
+                e
+            )
+
+            return False
+
+
+
+    # --------------------------------------------------------
+
+    def send_signal(self, signal):
+
+
+        text = f"""
+
+<b>SFP MSS SIGNAL</b>
+
+
+Pair: {signal['pair']}
+
+Direction: {signal['direction']}
+
+Confidence: {signal['confidence']}%
+
+
+Entry: {signal['entry']}
+
+Stop: {signal['stop']}
+
+Target: {signal['target']}
+
+
+Volume: {signal['volume']}
 
 """
 
-    return text.strip()
 
-
-
-
-
-# ============================================================
-# Отправка торгового сигнала
-# ============================================================
-
-def send_signal(signal):
-
-
-    message = format_signal(signal)
-
-
-    return send_telegram(
-        message
-    )
+        return self.send(
+            text.strip()
+        )
