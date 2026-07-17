@@ -1,6 +1,6 @@
 # ============================================================
 # core/scanner.py
-# Market Scanner
+# SFP MSS Scanner with Quality Filters + HTF Trend
 # ============================================================
 
 
@@ -17,8 +17,10 @@ from core.indicators import (
 )
 
 
-from core.quality import quality_check
-
+from core.filters import (
+    ema200_trend,
+    quality_check
+)
 
 
 from config import (
@@ -29,8 +31,45 @@ from config import (
 
 
 
-
 okx = OKXClient()
+
+
+
+
+
+# ============================================================
+# GET HTF TREND
+# ============================================================
+
+def get_higher_trend(symbol):
+
+
+    candles = okx.get_ohlcv(
+
+        symbol,
+
+        "4H",
+
+        CANDLE_LIMIT
+
+    )
+
+
+    if candles is None:
+
+        return None
+
+
+
+    if len(candles) < 200:
+
+        return None
+
+
+
+    return ema200_trend(
+        candles
+    )
 
 
 
@@ -40,12 +79,10 @@ okx = OKXClient()
 # MARKET SCANNER
 # ============================================================
 
-
 def scan_market(timeframe):
 
 
     signals = []
-
 
 
     print(
@@ -66,9 +103,13 @@ def scan_market(timeframe):
 
 
         candles = okx.get_ohlcv(
+
             symbol,
+
             timeframe,
+
             CANDLE_LIMIT
+
         )
 
 
@@ -79,13 +120,43 @@ def scan_market(timeframe):
 
 
 
-
         if len(candles) < 200:
 
             continue
 
 
 
+
+
+        # =================================
+        # HTF FILTER
+        # =================================
+
+
+        higher_trend = None
+
+
+
+        if timeframe != "4H":
+
+            higher_trend = get_higher_trend(
+                symbol
+            )
+
+
+
+            print(
+                "HTF trend:",
+                higher_trend
+            )
+
+
+
+
+
+        # =================================
+        # BASIC CONDITIONS
+        # =================================
 
 
         volume_ok = volume_confirmation(
@@ -102,7 +173,6 @@ def scan_market(timeframe):
         short_sfp = bearish_sfp(
             candles
         )
-
 
 
         long_mss = bullish_mss(
@@ -145,13 +215,13 @@ def scan_market(timeframe):
 
 
 
-        # =====================================
-        # SETUP DETECTION
-        # =====================================
+
+        # =================================
+        # SETUP
+        # =================================
 
 
         if long_sfp and long_mss:
-
 
             direction = "LONG"
 
@@ -159,14 +229,14 @@ def scan_market(timeframe):
 
         elif short_sfp and short_mss:
 
-
             direction = "SHORT"
 
 
 
 
-        elif long_mss and volume_ok:
+        # MSS + volume fallback
 
+        elif long_mss and volume_ok:
 
             direction = "LONG"
 
@@ -174,9 +244,7 @@ def scan_market(timeframe):
 
         elif short_mss and volume_ok:
 
-
             direction = "SHORT"
-
 
 
 
@@ -189,66 +257,35 @@ def scan_market(timeframe):
 
 
 
-        # =====================================
-        # BASIC SCORE
-        # =====================================
+        # =================================
+        # QUALITY FILTERS
+        # =================================
 
 
-        score = signal_score(
-            candles,
-            direction
-        )
-
-
-
-        print(
-            "Base Score:",
-            score
-        )
-
-
-
-
-        if score < MIN_SIGNAL_SCORE:
-
-            print(
-                "Rejected: low score"
-            )
-
-            continue
-
-
-
-
-
-        # =====================================
-        # QUALITY FILTER
-        # =====================================
-
-
-        quality_ok, quality_score = quality_check(
+        passed, filter_score = quality_check(
 
             candles,
 
-            direction
+            direction,
+
+            higher_trend
 
         )
 
 
 
         print(
-            "Quality:",
-            quality_score
+            "Filter score:",
+            filter_score
         )
 
 
 
-        if not quality_ok:
+        if not passed:
 
 
             print(
-                "Rejected by quality filter:",
-                symbol
+                "Rejected by quality filter"
             )
 
 
@@ -258,22 +295,45 @@ def scan_market(timeframe):
 
 
 
-        final_score = score + quality_score
+        # =================================
+        # FINAL SCORE
+        # =================================
+
+
+        base_score = signal_score(
+
+            candles,
+
+            direction
+
+        )
 
 
 
-        if final_score > 100:
+        final_score = (
 
-            final_score = 100
+            base_score
 
+            +
 
+            filter_score
+
+        )
 
 
 
         print(
-            "FINAL SCORE:",
+            "Final score:",
             final_score
         )
+
+
+
+
+
+        if final_score < MIN_SIGNAL_SCORE:
+
+            continue
 
 
 
@@ -289,9 +349,7 @@ def scan_market(timeframe):
 
                 direction,
 
-                final_score,
-
-                quality_score
+                final_score
 
             )
 
@@ -313,21 +371,12 @@ def scan_market(timeframe):
 # CREATE SIGNAL
 # ============================================================
 
-
 def create_signal(
-
         symbol,
-
         df,
-
         direction,
-
-        score,
-
-        quality_score
-
+        score
 ):
-
 
 
     entry = float(
@@ -343,11 +392,12 @@ def create_signal(
     if direction == "LONG":
 
 
-
         stop = float(
 
             df["low"]
+
             .tail(10)
+
             .min()
 
         )
@@ -379,7 +429,9 @@ def create_signal(
         stop = float(
 
             df["high"]
+
             .tail(10)
+
             .max()
 
         )
@@ -404,73 +456,50 @@ def create_signal(
 
 
 
-
     return {
 
 
         "pair":
-
             symbol,
 
 
-
         "exchange":
-
             "OKX",
 
 
 
         "direction":
-
             direction,
 
 
 
         "confidence":
-
-            score,
-
-
-
-        "quality":
-
-            quality_score,
+            round(score),
 
 
 
         "entry":
-
-            round(
-                entry,
-                8
-            ),
+            round(entry,8),
 
 
 
         "stop":
-
-            round(
-                stop,
-                8
-            ),
+            round(stop,8),
 
 
 
         "target":
-
-            round(
-                target,
-                8
-            ),
+            round(target,8),
 
 
 
         "volume":
-
             round(
 
                 float(
+
                     df.iloc[-1]["volume"]
+
                 ),
 
                 2
