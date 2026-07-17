@@ -9,7 +9,6 @@ BASE_URL = "https://api.geckoterminal.com/api/v2"
 class GeckoTerminal:
 
 
-
     def __init__(self):
 
         self.headers = {
@@ -31,11 +30,54 @@ class GeckoTerminal:
 
             pool_address,
 
-            timeframe="minute_15",
+            timeframe="15m",
 
             limit=200
 
     ):
+
+
+        timeframe_map = {
+
+            "minute_5": "minute",
+
+            "minute_15": "minute",
+
+            "hour": "hour"
+
+        }
+
+
+
+        aggregate_map = {
+
+            "minute_5": 5,
+
+            "minute_15": 15,
+
+            "hour": 1
+
+        }
+
+
+
+        timeframe_type = timeframe_map.get(
+
+            timeframe,
+
+            "minute"
+
+        )
+
+
+
+        aggregate = aggregate_map.get(
+
+            timeframe,
+
+            15
+
+        )
 
 
 
@@ -44,13 +86,17 @@ class GeckoTerminal:
             f"{BASE_URL}/networks/"
             f"{network}/pools/"
             f"{pool_address}/ohlcv/"
-            f"{timeframe}"
+            f"{timeframe_type}"
 
         )
 
 
 
         params = {
+
+            "aggregate":
+            aggregate,
+
 
             "limit":
             limit
@@ -78,17 +124,30 @@ class GeckoTerminal:
 
             if response.status_code != 200:
 
+
+                print(
+
+                    "OHLCV API ERROR:",
+
+                    response.status_code,
+
+                    response.text[:200]
+
+                )
+
+
                 return None
 
 
 
-            result = response.json()
+
+            data = response.json()
 
 
 
             candles = (
 
-                result
+                data
                 .get("data", {})
                 .get("attributes", {})
                 .get("ohlcv_list", [])
@@ -98,6 +157,7 @@ class GeckoTerminal:
 
 
             if not candles:
+
 
                 return None
 
@@ -128,7 +188,7 @@ class GeckoTerminal:
 
 
 
-            for column in [
+            for col in [
 
                 "open",
 
@@ -143,9 +203,9 @@ class GeckoTerminal:
             ]:
 
 
-                df[column] = pd.to_numeric(
+                df[col] = pd.to_numeric(
 
-                    df[column],
+                    df[col],
 
                     errors="coerce"
 
@@ -165,9 +225,11 @@ class GeckoTerminal:
 
 
 
-            df = df.reset_index(
+            df.reset_index(
 
-                drop=True
+                drop=True,
+
+                inplace=True
 
             )
 
@@ -182,7 +244,8 @@ class GeckoTerminal:
 
             print(
 
-                "OHLCV error:",
+                "OHLCV ERROR:",
+
                 e
 
             )
@@ -253,7 +316,6 @@ class GeckoTerminal:
 
             return {
 
-
                 "name":
 
                     attr.get(
@@ -261,14 +323,16 @@ class GeckoTerminal:
                     ),
 
 
-
                 "liquidity":
 
                     float(
 
                         attr.get(
+
                             "reserve_in_usd",
+
                             0
+
                         )
 
                     )
@@ -282,7 +346,8 @@ class GeckoTerminal:
 
             print(
 
-                "Pool data error:",
+                "POOL ERROR:",
+
                 e
 
             )
