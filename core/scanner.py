@@ -24,7 +24,7 @@ okx = OKXClient()
 
 
 # =====================================
-# Сканирование рынка OKX
+# Сканирование рынка
 # =====================================
 
 
@@ -32,7 +32,6 @@ def scan_market(timeframe):
 
 
     signals = []
-
 
 
     print(
@@ -44,13 +43,9 @@ def scan_market(timeframe):
     for symbol in SYMBOLS:
 
 
-
         print(
-
-            "Checking",
-
+            "\nChecking",
             symbol
-
         )
 
 
@@ -69,26 +64,86 @@ def scan_market(timeframe):
 
         if candles is None:
 
+            print(
+                "No candles"
+            )
+
             continue
+
 
 
 
         if len(candles) < 100:
 
-            continue
-
-
-
-
-        if not volume_confirmation(candles):
+            print(
+                "Not enough candles:",
+                len(candles)
+            )
 
             continue
+
+
+
+
+
+        volume_ok = volume_confirmation(
+            candles
+        )
+
+
+
+        long_sfp = bullish_sfp(
+            candles
+        )
+
+
+        short_sfp = bearish_sfp(
+            candles
+        )
+
+
+        long_mss = bullish_mss(
+            candles
+        )
+
+
+        short_mss = bearish_mss(
+            candles
+        )
+
+
+
+
+
+        print(
+            "Volume:",
+            volume_ok
+        )
+
+
+        print(
+            "LONG:",
+            "SFP",
+            long_sfp,
+            "MSS",
+            long_mss
+        )
+
+
+        print(
+            "SHORT:",
+            "SFP",
+            short_sfp,
+            "MSS",
+            short_mss
+        )
 
 
 
 
 
         direction = None
+
 
 
 
@@ -100,17 +155,16 @@ def scan_market(timeframe):
 
         if (
 
-            bullish_sfp(candles)
+            long_sfp
 
             and
 
-            bullish_mss(candles)
+            long_mss
 
         ):
 
 
             direction = "LONG"
-
 
 
 
@@ -123,11 +177,11 @@ def scan_market(timeframe):
 
         elif (
 
-            bearish_sfp(candles)
+            short_sfp
 
             and
 
-            bearish_mss(candles)
+            short_mss
 
         ):
 
@@ -138,8 +192,8 @@ def scan_market(timeframe):
 
 
 
-
         if direction is None:
+
 
             continue
 
@@ -156,10 +210,19 @@ def scan_market(timeframe):
         )
 
 
+        print(
+            "Signal score:",
+            score
+        )
 
 
 
         if score < MIN_SIGNAL_SCORE:
+
+
+            print(
+                "Score too low"
+            )
 
             continue
 
@@ -167,23 +230,19 @@ def scan_market(timeframe):
 
 
 
-        signal = create_signal(
-
-            symbol,
-
-            candles,
-
-            direction,
-
-            score
-
-        )
-
-
-
         signals.append(
 
-            signal
+            create_signal(
+
+                symbol,
+
+                candles,
+
+                direction,
+
+                score
+
+            )
 
         )
 
@@ -197,7 +256,7 @@ def scan_market(timeframe):
 
 
 # =====================================
-# Формирование сигнала
+# Создание сигнала
 # =====================================
 
 
@@ -222,6 +281,8 @@ def create_signal(
 
 
 
+
+
     if direction == "LONG":
 
 
@@ -234,7 +295,6 @@ def create_signal(
             .min()
 
         )
-
 
 
         target = (
@@ -257,8 +317,8 @@ def create_signal(
 
 
 
-    else:
 
+    else:
 
 
         stop = float(
@@ -270,7 +330,6 @@ def create_signal(
             .max()
 
         )
-
 
 
         target = (
@@ -295,6 +354,7 @@ def create_signal(
 
 
 
+
     return {
 
 
@@ -303,11 +363,9 @@ def create_signal(
             symbol,
 
 
-
         "exchange":
 
             "OKX",
-
 
 
         "direction":
@@ -315,61 +373,42 @@ def create_signal(
             direction,
 
 
-
         "confidence":
 
             score,
 
 
-
         "entry":
 
             round(
-
                 entry,
-
                 8
-
             ),
-
 
 
         "stop":
 
             round(
-
                 stop,
-
                 8
-
             ),
-
 
 
         "target":
 
             round(
-
                 target,
-
                 8
-
             ),
-
 
 
         "volume":
 
             round(
-
                 float(
-
                     df.iloc[-1]["volume"]
-
                 ),
-
                 2
-
             )
 
     }
