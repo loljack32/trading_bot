@@ -28,9 +28,11 @@ def evaluate_filters(df, direction: str, htf_trend: str | None = None) -> Signal
         metrics.reasons.append("EMA200 against trend")
 
     rsi = calculate_rsi(prepared, RSI_PERIOD)
-    if direction == "LONG" and 35 <= rsi <= 70:
+    if direction == "LONG" and 45 <= rsi <= 60:
+        metrics.rsi_passed = True
         metrics.reasons.append("RSI in range")
-    elif direction == "SHORT" and 30 <= rsi <= 65:
+    elif direction == "SHORT" and 40 <= rsi <= 60:
+        metrics.rsi_passed = True
         metrics.reasons.append("RSI in range")
     else:
         metrics.reasons.append("RSI extreme")
@@ -38,21 +40,21 @@ def evaluate_filters(df, direction: str, htf_trend: str | None = None) -> Signal
     atr = calculate_atr(prepared, ATR_PERIOD)
     price = float(prepared["close"].iloc[-1])
     atr_ratio = atr / max(price, 1e-9)
-    if atr_ratio >= 0.0015:
+    if atr_ratio >= 0.0022:
         metrics.atr_passed = True
         metrics.reasons.append("ATR adequate")
     else:
         metrics.reasons.append("ATR too low")
 
     volume_ratio = calculate_volume_ratio(prepared, period=20)
-    if volume_ratio >= 1.2:
+    if volume_ratio >= 1.5:
         metrics.volume_passed = True
         metrics.reasons.append("Volume expansion")
     else:
         metrics.reasons.append("Volume weak")
 
     candle_strength = calculate_candle_strength(prepared)
-    if candle_strength >= 0.75:
+    if candle_strength >= 0.85:
         metrics.candle_strength_passed = True
         metrics.reasons.append("Strong candle")
     else:
@@ -65,18 +67,21 @@ def evaluate_filters(df, direction: str, htf_trend: str | None = None) -> Signal
         else:
             metrics.reasons.append("HTF against")
 
-    if metrics.trend_passed or metrics.atr_passed or metrics.volume_passed or metrics.candle_strength_passed:
+    if metrics.trend_passed and metrics.rsi_passed and metrics.atr_passed and metrics.volume_passed and metrics.candle_strength_passed:
         metrics.reasons.append("Core filters pass")
+    else:
+        metrics.reasons.append("Core filters weak")
     if metrics.htf_passed is False and htf_trend is not None:
         metrics.reasons.append("HTF filter failed")
 
     metrics.score = sum(
         [
-            20 if metrics.trend_passed else 0,
-            10 if metrics.atr_passed else 0,
-            10 if metrics.volume_passed else 0,
-            5 if metrics.candle_strength_passed else 0,
-            20 if metrics.htf_passed else 0,
+            25 if metrics.trend_passed else 0,
+            10 if metrics.rsi_passed else 0,
+            15 if metrics.atr_passed else 0,
+            15 if metrics.volume_passed else 0,
+            10 if metrics.candle_strength_passed else 0,
+            25 if metrics.htf_passed else 0,
         ]
     )
     return metrics

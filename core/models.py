@@ -10,6 +10,7 @@ class SignalMetrics:
     mss_passed: bool = False
     htf_passed: bool = False
     trend_passed: bool = False
+    rsi_passed: bool = False
     volume_passed: bool = False
     atr_passed: bool = False
     candle_strength_passed: bool = False
