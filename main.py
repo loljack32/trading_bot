@@ -4,7 +4,7 @@ import os
 import sys
 from typing import Any
 
-from config import APP_CONFIG, MAX_SIGNALS_PER_SCAN, TIMEFRAMES
+from config import APP_CONFIG, HTF_TIMEFRAME, MAX_SIGNALS_PER_SCAN
 from core.scanner import SignalScanner
 from notifications.telegram import TelegramBot
 from services.history import add_history, is_new_signal, load_history, save_history
@@ -29,17 +29,15 @@ def main() -> None:
     metrics = calculate_position_from_state(state)
 
     sent_count = 0
-    for timeframe in APP_CONFIG.timeframes:
-        try:
-            signals = scanner.scan(timeframe)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.exception("Scanner failed for %s: %s", timeframe, exc)
-            continue
+    try:
+        signals = scanner.scan(HTF_TIMEFRAME)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Scanner failed for %s: %s", HTF_TIMEFRAME, exc)
+        signals = []
 
-        if not signals:
-            logger.info("No valid signals for %s", timeframe)
-            continue
-
+    if not signals:
+        logger.info("No valid signals for %s", HTF_TIMEFRAME)
+    else:
         for signal in signals:
             if sent_count >= MAX_SIGNALS_PER_SCAN:
                 break

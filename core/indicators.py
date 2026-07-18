@@ -116,7 +116,7 @@ def _recent_swing_low(df: pd.DataFrame, lookback: int = SWING_LOOKBACK) -> float
 
 def detect_sfp(df: pd.DataFrame, direction: str) -> dict[str, Any] | None:
     prepared = prepare_dataframe(df)
-    if len(prepared) < 5:
+    if len(prepared) < 3:
         return None
     candle = prepared.iloc[-1]
     prev_swing_low = _recent_swing_low(prepared)

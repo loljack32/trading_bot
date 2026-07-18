@@ -17,8 +17,8 @@ from pathlib import Path
 import pandas as pd
 
 from config import TIMEFRAMES
-from core.indicators import calculate_atr, detect_mss, detect_sfp, prepare_dataframe
 from core.okx import OKXClient
+from core.scanner import SignalScanner
 from utils.logger import get_logger
 
 
@@ -31,6 +31,7 @@ class BacktestEngine:
         self.timeframe = timeframe
         self.lookback = lookback
         self.client = OKXClient()
+        self.scanner = SignalScanner(client=self.client)
         self.signals: list[dict] = []
         self.performance = {
             "total_signals": 0,
@@ -47,50 +48,29 @@ class BacktestEngine:
 
     def run(self) -> dict:
         logger.info("Starting backtest for %s %s (lookback=%d)", self.symbol, self.timeframe, self.lookback)
-        
-        candles = self.client.get_ohlcv(self.symbol, self.timeframe, self.lookback)
-        if candles is None or len(candles) < 100:
-            logger.error("Not enough candles loaded (got %s)", len(candles) if candles else 0)
+        if self.timeframe != "4H":
+            logger.error("Backtest only supports 4H signals for the current SFP+MSS logic")
             return self.performance
 
-        df = prepare_dataframe(candles)
-        if df.empty:
-            logger.error("DataFrame is empty after prepare")
+        signals = self.scanner.scan_symbol(self.symbol)
+        if not signals:
+            logger.warning("No signals found for %s", self.symbol)
             return self.performance
 
-        logger.info("Loaded %d candles for %s %s", len(df), self.symbol, self.timeframe)
-
-        # Scan for signals
-        for idx in range(80, len(df)):
-            window = df.iloc[:idx+1].copy()
-            sfp_long = detect_sfp(window, "LONG")
-            sfp_short = detect_sfp(window, "SHORT")
-            mss_long = detect_mss(window, "LONG")
-            mss_short = detect_mss(window, "SHORT")
-
-            # Record signals
-            candle = df.iloc[idx]
-            ts = candle.get("timestamp", idx)
-            close = float(candle["close"])
-            atr = calculate_atr(window)
-
-            for direction, sfp, mss in [("LONG", sfp_long, mss_long), ("SHORT", sfp_short, mss_short)]:
-                sfp_ok = sfp and sfp.get("passed")
-                mss_ok = mss and mss.get("passed")
-
-                if sfp_ok or mss_ok:
-                    self.signals.append({
-                        "idx": idx,
-                        "ts": ts,
-                        "close": close,
-                        "atr": atr,
-                        "direction": direction,
-                        "sfp": sfp_ok,
-                        "mss": mss_ok,
-                        "both": sfp_ok and mss_ok,
-                        "sfp_detail": sfp,
-                        "mss_detail": mss,
-                    })
+        for signal in signals:
+            mss_passed = "SFP+MSS" in signal.setup
+            self.signals.append({
+                "pair": signal.pair,
+                "ts": None,
+                "close": signal.entry,
+                "atr": None,
+                "direction": signal.direction,
+                "sfp": True,
+                "mss": mss_passed,
+                "both": mss_passed,
+                "setup": signal.setup,
+                "signal_detail": signal.to_dict(),
+            })
 
         self._compute_metrics()
         logger.info("Backtest complete. Total signals: %d", self.performance["total_signals"])
@@ -108,17 +88,18 @@ class BacktestEngine:
         self.performance["mss_passed"] = sum(1 for s in self.signals if s["mss"])
         self.performance["both_passed"] = sum(1 for s in self.signals if s["both"])
 
-        # Estimate precision: signals with both SFP and MSS are likely more reliable
         if self.performance["total_signals"] > 0:
             self.performance["precision_estimate"] = (
                 self.performance["both_passed"] / self.performance["total_signals"]
             )
 
-        # Estimate RR: use ATR-based risk/reward from last signal
+        # Estimate RR from signal payload if available
         if self.signals:
-            last_sig = self.signals[-1]
-            atr = float(last_sig["atr"]) or 1.0
-            self.performance["avg_rr"] = 2.0 * atr / atr if atr > 0 else 2.0
+            first_sig = self.signals[0].get("signal_detail")
+            if first_sig and first_sig.get("rr") is not None:
+                self.performance["avg_rr"] = float(first_sig["rr"])
+            else:
+                self.performance["avg_rr"] = 2.0
 
     def print_report(self) -> None:
         print(f"\n{'='*70}")
@@ -136,8 +117,9 @@ class BacktestEngine:
         print(f"  - Avg RR: {self.performance['avg_rr']:.2f}:1")
         print(f"\nFirst 10 signals:")
         for i, sig in enumerate(self.signals[:10]):
+            atr_text = f"{sig['atr']:.4f}" if sig['atr'] is not None else "n/a"
             print(f"  {i+1}. [{sig['direction']}] ts={sig['ts']} close={sig['close']:.2f} "
-                  f"SFP={sig['sfp']} MSS={sig['mss']} ATR={sig['atr']:.4f}")
+                  f"SFP={sig['sfp']} MSS={sig['mss']} ATR={atr_text}")
         print(f"\n{'='*70}\n")
 
 
